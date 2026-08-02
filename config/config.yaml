@@ -1,0 +1,22 @@
+
+logger:
+  # Console output
+  level: trace
+  caller: 0
+
+  # File output
+  file:
+    name: "logs/app.log"
+    size: 134217728 # 128MiB
+    backups: 7
+
+telemetry:
+  service_name: "hsa"
+  service_version: "1.0.0"
+  environment: "dev"
+  enabled: false
+  
+  exporter:
+    conn:
+      endpoint: 127.0.0.1:4317
+    timeout: 5s
