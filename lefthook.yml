@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.go"
+      run: golangci-lint run --fix {staged_files}
+      stage_fixed: true
+    format:
+      glob: "*.go"
+      run: goimports -w {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    test:
+      run: go test -race -count=1 ./...
+    vuln:
+      run: govulncheck ./...

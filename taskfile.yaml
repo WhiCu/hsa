@@ -1,0 +1,110 @@
+version: '3'
+
+silent: false
+
+env:
+  PATH_EXE: ./bin
+  PATH_MAIN: ./cmd
+  DIR_CONFIG: ./config
+  PATH_CONFIG: "{{.DIR_CONFIG}}/config.yaml"
+  APP_LOGGER_LEVEL: "debug"
+
+dotenv:
+  - .env
+  - '{{.DIR_CONFIG}}/.env'
+
+vars:
+  LOG_LEVEL: "trave"
+  GOLANGCI_LINT_VERSION: "v2.12.2"
+
+tasks:
+
+# ── Init ──────────────────────────────────────────────────────────────────────
+
+  init:
+    desc: Set up everything needed to start working on the project
+    cmds:
+      - task: init:tools
+      - task: init:hooks
+      - go mod download
+      - echo "init done"
+
+  init:hooks:
+    desc: Install git hooks (lefthook)
+    cmds:
+      - lefthook install
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+  build:
+    desc: Build main binary
+    cmds:
+      - go build -o {{.PATH_EXE}}/main.exe {{.PATH_MAIN}}/main.go
+
+# ── Generate ──────────────────────────────────────────────────────────────────
+
+  generate:
+    desc: Generate code
+    cmds:
+      - task: generate:go
+  
+  generate:go:
+    desc: Generate Go
+    cmds:
+      - go generate ./...
+
+# ── Lint ──────────────────────────────────────────────────────────────────────
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    desc: Run golangci-lint and auto-fix what it can
+    cmds:
+      - golangci-lint run --fix
+
+  lint:vuln:
+    desc: Scan dependencies for known vulnerabilities
+    cmds:
+      - govulncheck ./...
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+
+  test:
+    desc: Test all
+    cmds:
+      - go test -v -cover --race ./...
+
+# ── Air ───────────────────────────────────────────────────────────────────────
+
+  air:
+    desc: Run air (live reload)
+    deps: [test]
+    cmds:
+      - air -d
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+  run:
+    desc: Run main binary
+    cmds:
+      - go run {{.PATH_MAIN}}/main.go
+
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+  docker:build:
+    desc: Build all Docker images
+    cmds:
+      - docker compose build
+
+  docker:up:
+    desc: Start full stack
+    cmds:
+      - docker compose up -d --wait
+
+  docker:down:
+    desc: Stop full stack
+    cmds:
+      - docker compose down

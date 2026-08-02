@@ -1,0 +1,18 @@
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otelcol
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+      - "8889:8889" 
+    networks:
+      - observability
+
+networks:
+  observability:
+    driver: bridge

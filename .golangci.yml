@@ -1,0 +1,142 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true               # lint test files too
+  relative-path-mode: gomod
+
+linters:
+  # "standard" = golangci-lint's curated default set
+  # (errcheck, gosimple, govet, ineffassign, staticcheck, unused)
+  default: standard
+
+  enable:
+    # --- bugs & correctness ---
+    - asciicheck
+    - bodyclose          # HTTP response bodies must be closed
+    - contextcheck       # context propagated correctly, not lost/recreated
+    - copyloopvar        # loop var capture mistakes (mostly relevant <1.22, harmless on newer Go)
+    - errorlint          # correct error wrapping / errors.Is/As usage
+    - errname            # sentinel errors named ErrXxx, error types named XxxError
+    - nilerr             # returning nil when err != nil
+    - nilnesserr         # similar nil-check footguns
+    - nilnil             # returning (nil, nil) when an error is expected
+    - noctx              # HTTP requests made without context
+    - rowserrcheck       # sql.Rows.Err() not checked
+    - sqlclosecheck      # sql.Rows/Stmt not closed
+    - wastedassign       # value assigned then overwritten before use
+    - makezero           # make([]T, n) misused with append
+    - durationcheck      # suspicious time.Duration multiplication
+    - exptostd           # use stdlib instead of golang.org/x/exp where possible
+    - fatcontext         # context stored/captured incorrectly in loops
+    - reassign           # reassignment of global/package vars (see TODO above)
+    - recvcheck          # consistent receiver names across a type's methods
+
+    # --- security ---
+    - gosec
+
+    # --- complexity (kept generous so it only flags genuinely overgrown code) ---
+    - cyclop
+    - funlen
+
+    # --- style / maintainability (low-noise ones only) ---
+    - gocritic           # broad diagnostics + style checks, configurable below
+    - revive             # configurable replacement for golint
+    - unconvert          # unnecessary type conversions
+    - unparam            # unused function parameters
+    - predeclared        # shadowing builtins (true, len, etc.)
+    - misspell           # comments/strings typos
+    - whitespace         # unnecessary blank lines
+    - usestdlibvars      # use stdlib constants instead of magic literals (http.MethodGet etc.)
+    - modernize          # suggests modern Go idioms for your go.mod version
+    - goconst            # repeated string literals that could be constants
+    - asciicheck         # non-ASCII identifiers (portability)
+    - musttag            # missing struct tags on (un)marshaled fields
+    - perfsprint         # faster alternatives to fmt.Sprintf
+    - exhaustive         # switch over enum/const-iota covers all cases
+
+    # --- testing ---
+    - usetesting         # modern testing helpers (t.Cleanup, t.Context, etc.)
+    - testifylint        # correct usage of testify
+    - tparallel          # misuse of t.Parallel() in subtests
+
+    # --- dead/duplicate code ---
+    - dupword             # duplicate words in comments/strings ("the the")
+    - dupl                # duplicated code blocks — narrow with exclusions below if noisy
+
+    # --- hygiene around the linter itself ---
+    - nolintlint           # //nolint comments must be specific and explained
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment    # memory-layout micro-opt, noisy, rarely worth it
+      settings:
+        shadow:
+          strict: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gocritic:
+      disabled-checks:
+        - ifElseChain      # too opinionated, lots of false positives
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: unreachable-code
+        - name: unused-parameter
+        # Deliberately NOT enabling "exported"/"package-comments" here —
+        # if you want enforced doc comments, add them explicitly instead of
+        # suppressing the messages later via exclusions.rules (more fragile).
+    gosec:
+      excludes:
+        - G104             # duplicate of errcheck, avoid double-reporting
+    staticcheck:
+      checks:
+        - all
+        - -ST1000   # missing package comment
+        - -QF1008   # explicit embedded-field selector
+    cyclop:
+      max-complexity: 30   # default is 10; this only catches truly tangled functions
+    funlen:
+      lines: 90            # default is 60; generous on purpose
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    reassign:
+      # TODO: ".*" blocks reassigning ANY global var, including the common
+      # `var timeNow = time.Now` test-mocking pattern. Default ["EOF", "Err.*"]
+      # is safer if your codebase uses that pattern.
+      patterns:
+        - ".*"
+
+  exclusions:
+    generated: lax
+    warn-unused: true
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    rules:
+      # tests get a pass on a few noisier checks
+      - path: _test\.go
+        linters:
+          - gosec
+          - dupl
+          - errcheck
+          - bodyclose
+          - funlen
+
+formatters:
+  enable:
+    - goimports   # superset of gofmt: formats + sorts/groups imports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0   # set to e.g. 20-50 instead if onboarding a large legacy codebase
