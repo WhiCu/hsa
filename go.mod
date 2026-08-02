@@ -1,6 +1,6 @@
 module github.com/whicu/hsa
 
-go 1.26.1
+go 1.26.5
 
 require (
 	github.com/go-faster/jx v1.2.0
@@ -17,7 +17,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.20.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.83.0
 	pgregory.net/rapid v1.3.0
 )
 
