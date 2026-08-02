@@ -1,0 +1,13 @@
+package invite_test
+
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestInvite(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Invite Suite")
+}
