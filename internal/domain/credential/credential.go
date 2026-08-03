@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	ErrIDRequired         = errors.New("credential: id is required")
-	ErrExternalIDRequired = errors.New("credential: external id is required")
-	ErrPublicKeyRequired  = errors.New("credential: public key is required")
+	ErrIDRequired          = errors.New("credential: id is required")
+	ErrExternalIDRequired  = errors.New("credential: external id is required")
+	ErrPublicKeyRequired   = errors.New("credential: public key is required")
+	ErrSignCountRegression = errors.New("credential: sign count regression detected")
 )
 
 type CredentialID = uuid.UUID
@@ -54,14 +55,27 @@ func New(
 		return nil, ErrPublicKeyRequired
 	}
 	return &Credential{
-		id: id, userID: userID, publicKey: publicKey,
-		transports: transports, createdAt: createdAt,
+		id:         id,
+		externalID: externalID,
+		userID:     userID,
+		publicKey:  publicKey,
+		transports: transports,
+		createdAt:  createdAt,
 	}, nil
 }
 
 func (c *Credential) ID() CredentialID       { return c.id }
 func (c *Credential) ExternalID() ExternalID { return c.externalID }
 func (c *Credential) UserID() user.UserID    { return c.userID }
+func (c *Credential) PublicKey() []byte      { return c.publicKey }
 func (c *Credential) SignCount() uint32      { return c.signCount }
+func (c *Credential) Transports() []string   { return c.transports }
+func (c *Credential) CreatedAt() time.Time   { return c.createdAt }
 
-func (c *Credential) SetSignCount(n uint32) { c.signCount = n }
+func (c *Credential) SetSignCount(n uint32) error {
+	if n <= c.signCount && c.signCount != 0 {
+		return ErrSignCountRegression
+	}
+	c.signCount = n
+	return nil
+}

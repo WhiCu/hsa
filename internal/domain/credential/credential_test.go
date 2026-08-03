@@ -44,8 +44,12 @@ var _ = Describe("Credential", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c).NotTo(BeNil())
 				Expect(c.ID()).To(Equal(id))
+				Expect(c.ExternalID()).To(Equal(externalID))
 				Expect(c.UserID()).To(Equal(userID))
+				Expect(c.PublicKey()).To(Equal(pubKey))
 				Expect(c.SignCount()).To(BeZero())
+				Expect(c.Transports()).To(Equal(transports))
+				Expect(c.CreatedAt()).To(Equal(now))
 			}
 		},
 
@@ -53,18 +57,46 @@ var _ = Describe("Credential", func() {
 		Entry("Nil Credential ID", uuid.Nil, []byte("external-id"), uuid.New(), []byte("pubkey-bytes"), credential.ErrIDRequired),
 		Entry("Nil User ID", uuid.New(), []byte("external-id"), uuid.Nil, []byte("pubkey-bytes"), user.ErrIDRequired),
 		Entry("Nil External ID", uuid.New(), nil, uuid.New(), []byte("pubkey-bytes"), credential.ErrExternalIDRequired),
+		Entry("Empty External ID", uuid.New(), []byte{}, uuid.New(), []byte("pubkey-bytes"), credential.ErrExternalIDRequired),
 		Entry("Empty Public Key", uuid.New(), []byte("external-id"), uuid.New(), []byte{}, credential.ErrPublicKeyRequired),
 		Entry("Nil Public Key", uuid.New(), []byte("external-id"), uuid.New(), nil, credential.ErrPublicKeyRequired),
 	)
 
 	Context("State mutations", func() {
-		It("should properly set and update sign count", func() {
-			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), nil, time.Now())
+		It("should properly set and update sign count, and detect regression", func() {
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(0)))
 
-			c.SetSignCount(42)
-			Expect(c.SignCount()).To(Equal(uint32(42)))
+			// Разрешено устанавливать 0, если текущий signCount == 0
+			err = c.SetSignCount(0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.SignCount()).To(Equal(uint32(0)))
+
+			// Валидное увеличение
+			err = c.SetSignCount(10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.SignCount()).To(Equal(uint32(10)))
+
+			// Проверка регрессии: одинаковое значение
+			err = c.SetSignCount(10)
+			Expect(err).To(MatchError(credential.ErrSignCountRegression))
+			Expect(c.SignCount()).To(Equal(uint32(10)))
+
+			// Проверка регрессии: меньшее значение
+			err = c.SetSignCount(5)
+			Expect(err).To(MatchError(credential.ErrSignCountRegression))
+			Expect(c.SignCount()).To(Equal(uint32(10)))
+
+			// Проверка регрессии: сброс в 0 для ненулевого счётчика
+			err = c.SetSignCount(0)
+			Expect(err).To(MatchError(credential.ErrSignCountRegression))
+			Expect(c.SignCount()).To(Equal(uint32(10)))
+
+			// Валидное дальнейшее увеличение
+			err = c.SetSignCount(15)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.SignCount()).To(Equal(uint32(15)))
 		})
 	})
 
@@ -76,15 +108,29 @@ var _ = Describe("Credential", func() {
 				userID := genValidUUID().Draw(t, "userID")
 				pubKey := rapid.SliceOfN(rapid.Byte(), 1, 256).Draw(t, "pubKey")
 				transports := rapid.SliceOf(rapid.String()).Draw(t, "transports")
-				signCount := rapid.Uint32().Draw(t, "signCount")
+				initialSignCount := rapid.Uint32().Draw(t, "initialSignCount")
 
-				c, err := credential.New(id, externalID, userID, pubKey, transports, time.Now())
+				now := time.Now()
+				c, err := credential.New(id, externalID, userID, pubKey, transports, now)
 				Expect(err).NotTo(HaveOccurred())
 
-				c.SetSignCount(signCount)
-				Expect(c.SignCount()).To(Equal(signCount))
 				Expect(c.ID()).To(Equal(id))
+				Expect(c.ExternalID()).To(Equal(externalID))
 				Expect(c.UserID()).To(Equal(userID))
+				Expect(c.PublicKey()).To(Equal(pubKey))
+				Expect(c.Transports()).To(Equal(transports))
+				Expect(c.CreatedAt()).To(Equal(now))
+
+				if initialSignCount > 0 {
+					err = c.SetSignCount(initialSignCount)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(c.SignCount()).To(Equal(initialSignCount))
+
+					// Проверка регрессии в Property-Based тесте
+					regressionVal := rapid.Uint32Range(0, initialSignCount).Draw(t, "regressionVal")
+					regErr := c.SetSignCount(regressionVal)
+					Expect(regErr).To(MatchError(credential.ErrSignCountRegression))
+				}
 			})
 		})
 	})
