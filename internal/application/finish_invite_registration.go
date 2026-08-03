@@ -9,11 +9,8 @@ import (
 	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/invite"
 	"github.com/whicu/hsa/internal/domain/key"
-	"github.com/whicu/hsa/internal/domain/session"
 	"github.com/whicu/hsa/internal/domain/user"
 )
-
-const refreshTokenLength = 32
 
 var ErrInviteNotFound = errors.New("application: invite not found")
 
@@ -34,14 +31,6 @@ type WrappedKeySaver interface {
 	SaveAll(ctx context.Context, keys []*key.WrappedKey) error
 }
 
-type RefreshTokenSaver interface {
-	Save(ctx context.Context, t *session.RefreshToken) error
-}
-
-type TokenIssuer interface {
-	IssueAccessToken(userID user.UserID, ttl time.Duration) (string, error)
-}
-
 type Transactor interface {
 	RunInTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -51,10 +40,8 @@ type FinishInviteRegistration struct {
 	users         UserSaver
 	credentials   CredentialSaver
 	keys          WrappedKeySaver
-	sessions      RefreshTokenSaver
+	sessionIssuer *SessionIssuer
 	registrator   Registrator
-	refreshTokens TokenGenerator
-	accessTokens  TokenIssuer
 	ids           IDGenerator
 	transactor    Transactor
 	refreshTTL    time.Duration
@@ -66,10 +53,8 @@ func NewFinishInviteRegistration(
 	users UserSaver,
 	credentials CredentialSaver,
 	keys WrappedKeySaver,
-	sessions RefreshTokenSaver,
+	sessionIssuer *SessionIssuer,
 	registrator Registrator,
-	refreshTokens TokenGenerator,
-	accessTokens TokenIssuer,
 	ids IDGenerator,
 	transactor Transactor,
 	refreshTTL time.Duration,
@@ -80,10 +65,8 @@ func NewFinishInviteRegistration(
 		users:         users,
 		credentials:   credentials,
 		keys:          keys,
-		sessions:      sessions,
+		sessionIssuer: sessionIssuer,
 		registrator:   registrator,
-		refreshTokens: refreshTokens,
-		accessTokens:  accessTokens,
 		ids:           ids,
 		transactor:    transactor,
 		refreshTTL:    refreshTTL,
@@ -95,6 +78,7 @@ type WrappedKeyInput struct {
 	Scope         key.Scope
 	WrappedDEK    []byte
 	WrapAlgorithm string
+	ViaRecovery   bool
 }
 
 type FinishInviteRegistrationInput struct {
@@ -153,9 +137,13 @@ func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInvite
 		}
 
 		wrapped := make([]*key.WrappedKey, 0, len(in.WrappedKeys))
-		credID := cred.ID()
 		for _, wk := range in.WrappedKeys {
-			k, kErr := key.New(ig.ids.NewID(), u.ID(), &credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
+			var credID *credential.CredentialID
+			if !wk.ViaRecovery {
+				cid := cred.ID()
+				credID = &cid
+			}
+			k, kErr := key.New(ig.ids.NewID(), u.ID(), credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
 			if kErr != nil {
 				return kErr
 			}
@@ -165,24 +153,12 @@ func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInvite
 			return txErr
 		}
 
-		rawRefresh, refreshHash, txErr := ig.refreshTokens.GenerateToken(refreshTokenLength)
-		if txErr != nil {
-			return txErr
-		}
-		rt, txErr := session.New(ig.ids.NewID(), u.ID(), refreshHash, in.DeviceInfo, in.IPAddress, ig.refreshTTL, now)
-		if txErr != nil {
-			return txErr
-		}
-		if txErr = ig.sessions.Save(ctx, rt); txErr != nil {
-			return txErr
-		}
-
-		access, txErr := ig.accessTokens.IssueAccessToken(u.ID(), ig.accessTTL)
+		access, refresh, txErr := ig.sessionIssuer.Issue(ctx, u.ID(), in.DeviceInfo, in.IPAddress, now)
 		if txErr != nil {
 			return txErr
 		}
 
-		out = FinishInviteRegistrationOutput{AccessToken: access, RefreshToken: rawRefresh}
+		out = FinishInviteRegistrationOutput{AccessToken: access, RefreshToken: refresh}
 		return nil
 	})
 	if err != nil {

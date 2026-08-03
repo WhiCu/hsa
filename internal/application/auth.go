@@ -14,9 +14,20 @@ type RegistrationResult struct {
 	CredentialID credential.ExternalID
 	PublicKey    []byte
 	Transports   []string
+	PRFSupported bool
 }
 
 type Registrator interface {
 	Begin(ctx context.Context, candidateUserID user.UserID, inviteID invite.InviteID) (challengeToken string, creationOptions []byte, err error)
 	Finish(ctx context.Context, challengeToken string, response []byte) (RegistrationResult, error)
+}
+
+type AuthenticationResult struct {
+	UserID       user.UserID
+	ExternalID   []byte
+	NewSignCount uint32
+}
+type Authenticator interface {
+	Begin(ctx context.Context) (challengeToken string, requestOptions []byte, err error)
+	Finish(ctx context.Context, challengeToken string, response []byte) (AuthenticationResult, error)
 }
