@@ -5,7 +5,10 @@ import (
 	"fmt"
 )
 
-var ErrValidation = errors.New("domain: validation error")
+var (
+	ErrValidation = errors.New("domain: validation error")
+	ErrNotFound   = errors.New("domain: entity not found")
+)
 
 func ErrInvalidArgument(err error) error {
 	return Wrap(ErrValidation, err)

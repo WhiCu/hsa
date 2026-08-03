@@ -28,7 +28,7 @@ type RefreshToken struct {
 	createdAt  time.Time
 }
 
-func NewRefreshToken(
+func New(
 	id RefreshTokenID,
 	userID user.UserID,
 	tokenHash, deviceInfo, ipAddress string,

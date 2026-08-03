@@ -1,0 +1,12 @@
+all: false
+template: testify
+dir: "{{.InterfaceDir}}/mocks"
+filename: "{{.InterfaceName}}.go"
+pkgname: "{{.SrcPackageName}}_test"
+structname: "{{.InterfaceName}}"
+
+packages:
+  github.com/whicu/hsa/internal/application:
+    config:
+      all: true
+      pkgname: "mocks"

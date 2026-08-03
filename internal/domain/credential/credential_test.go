@@ -30,11 +30,11 @@ func genValidUUID() *rapid.Generator[uuid.UUID] {
 var _ = Describe("Credential", func() {
 
 	DescribeTable("Creation and validation checks",
-		func(id credential.CredentialID, userID user.UserID, pubKey []byte, expectedErr error) {
+		func(id credential.CredentialID, externalID credential.ExternalID, userID user.UserID, pubKey []byte, expectedErr error) {
 			now := time.Now()
 			transports := []string{"usb", "nfc"}
 
-			c, err := credential.New(id, userID, pubKey, transports, now)
+			c, err := credential.New(id, externalID, userID, pubKey, transports, now)
 
 			if expectedErr != nil {
 				Expect(c).To(BeNil())
@@ -49,16 +49,17 @@ var _ = Describe("Credential", func() {
 			}
 		},
 
-		Entry("Valid credential", uuid.New(), uuid.New(), []byte("pubkey-bytes"), nil),
-		Entry("Nil Credential ID", uuid.Nil, uuid.New(), []byte("pubkey-bytes"), credential.ErrIDRequired),
-		Entry("Nil User ID", uuid.New(), uuid.Nil, []byte("pubkey-bytes"), user.ErrIDRequired),
-		Entry("Empty Public Key", uuid.New(), uuid.New(), []byte{}, credential.ErrPublicKeyRequired),
-		Entry("Nil Public Key", uuid.New(), uuid.New(), nil, credential.ErrPublicKeyRequired),
+		Entry("Valid credential", uuid.New(), []byte("external-id"), uuid.New(), []byte("pubkey-bytes"), nil),
+		Entry("Nil Credential ID", uuid.Nil, []byte("external-id"), uuid.New(), []byte("pubkey-bytes"), credential.ErrIDRequired),
+		Entry("Nil User ID", uuid.New(), []byte("external-id"), uuid.Nil, []byte("pubkey-bytes"), user.ErrIDRequired),
+		Entry("Nil External ID", uuid.New(), nil, uuid.New(), []byte("pubkey-bytes"), credential.ErrExternalIDRequired),
+		Entry("Empty Public Key", uuid.New(), []byte("external-id"), uuid.New(), []byte{}, credential.ErrPublicKeyRequired),
+		Entry("Nil Public Key", uuid.New(), []byte("external-id"), uuid.New(), nil, credential.ErrPublicKeyRequired),
 	)
 
 	Context("State mutations", func() {
 		It("should properly set and update sign count", func() {
-			c, err := credential.New(uuid.New(), uuid.New(), []byte("key"), nil, time.Now())
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), nil, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(0)))
 
@@ -71,12 +72,13 @@ var _ = Describe("Credential", func() {
 		It("should correctly instantiate valid credentials for arbitrary properties", func() {
 			rapid.Check(GinkgoT(), func(t *rapid.T) {
 				id := genValidUUID().Draw(t, "id")
+				externalID := rapid.SliceOfN(rapid.Byte(), 1, 256).Draw(t, "externalID")
 				userID := genValidUUID().Draw(t, "userID")
 				pubKey := rapid.SliceOfN(rapid.Byte(), 1, 256).Draw(t, "pubKey")
 				transports := rapid.SliceOf(rapid.String()).Draw(t, "transports")
 				signCount := rapid.Uint32().Draw(t, "signCount")
 
-				c, err := credential.New(id, userID, pubKey, transports, time.Now())
+				c, err := credential.New(id, externalID, userID, pubKey, transports, time.Now())
 				Expect(err).NotTo(HaveOccurred())
 
 				c.SetSignCount(signCount)
