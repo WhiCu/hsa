@@ -21,13 +21,14 @@ type ActiveInviteCounter interface {
 type CreateInvite struct {
 	invites InviteSaver
 	counter ActiveInviteCounter
+	tokens  TokenGenerator
 	ids     IDGenerator
 	policy  invite.Policy
 	ttl     time.Duration
 }
 
-func NewCreateInvite(invites InviteSaver, counter ActiveInviteCounter, ids IDGenerator, policy invite.Policy, ttl time.Duration) *CreateInvite {
-	return &CreateInvite{invites: invites, counter: counter, ids: ids, policy: policy, ttl: ttl}
+func NewCreateInvite(invites InviteSaver, counter ActiveInviteCounter, tokens TokenGenerator, ids IDGenerator, policy invite.Policy, ttl time.Duration) *CreateInvite {
+	return &CreateInvite{invites: invites, counter: counter, tokens: tokens, ids: ids, policy: policy, ttl: ttl}
 }
 
 func (ci *CreateInvite) Execute(ctx context.Context, createdBy user.UserID) (string, time.Time, error) {
@@ -40,7 +41,7 @@ func (ci *CreateInvite) Execute(ctx context.Context, createdBy user.UserID) (str
 		return "", time.Time{}, err
 	}
 
-	code, hash, err := generateToken(inviteCodeLength)
+	code, hash, err := ci.tokens.GenerateToken(inviteCodeLength)
 	if err != nil {
 		return "", time.Time{}, err
 	}
