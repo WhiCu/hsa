@@ -91,7 +91,14 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 			return txErr
 		}
 
-		cred.SetSignCount(result.NewSignCount)
+		if singErr := cred.SetSignCount(result.NewSignCount); singErr != nil {
+			uc.log.ErrorContext(ctx, "failed to update credential sign count",
+				slog.String("credential_id", cred.ID().String()),
+				slog.String("user_id", cred.UserID().String()),
+				slog.Any("error", singErr),
+			)
+			return singErr
+		}
 		if csErr := uc.credentialSaver.Save(ctx, cred); csErr != nil {
 			uc.log.ErrorContext(ctx, "failed to save updated credential sign count",
 				slog.String("credential_id", cred.ID().String()),

@@ -198,7 +198,10 @@ func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context,
 		ig.log.ErrorContext(ctx, "failed to create credential domain entity", slog.String("user_id", u.ID().String()), slog.Any("error", err))
 		return nil, nil, err
 	}
-	cred.SetSignCount(res.InitialSignCount)
+	if err = cred.SetSignCount(res.InitialSignCount); err != nil {
+		ig.log.ErrorContext(ctx, "failed to set initial sign count", slog.String("credential_id", cred.ID().String()), slog.Any("error", err))
+		return nil, nil, err
+	}
 
 	if err = ig.credentials.Save(ctx, cred); err != nil {
 		ig.log.ErrorContext(ctx, "failed to save credential", slog.String("credential_id", cred.ID().String()), slog.Any("error", err))
