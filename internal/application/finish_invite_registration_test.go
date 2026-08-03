@@ -3,6 +3,8 @@ package application_test
 import (
 	"context"
 	"errors"
+	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,10 +14,12 @@ import (
 
 	"github.com/whicu/hsa/internal/application"
 	"github.com/whicu/hsa/internal/application/mocks"
+	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/invite"
 	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/domain/user"
+	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("FinishInviteRegistration", func() {
@@ -33,8 +37,6 @@ var _ = Describe("FinishInviteRegistration", func() {
 
 		uc *application.FinishInviteRegistration
 		si *application.SessionIssuer
-
-		ctx context.Context
 	)
 
 	BeforeEach(func() {
@@ -46,197 +48,292 @@ var _ = Describe("FinishInviteRegistration", func() {
 		refreshTokens = mocks.NewTokenGenerator(GinkgoT())
 		accessTokens = mocks.NewTokenIssuer(GinkgoT())
 		ids = mocks.NewIDGenerator(GinkgoT())
-
-		si = application.NewSessionIssuer(sessions, refreshTokens, accessTokens, ids, 24*time.Hour, 15*time.Minute)
-
 		registrator = mocks.NewRegistrator(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
 
-		uc = application.NewFinishInviteRegistration(invites, users, credentials, keys, si, registrator, ids, transactor, 24*time.Hour, 15*time.Minute)
+		si = application.NewSessionIssuer(
+			logger.NewNOPSlog(),
+			sessions,
+			refreshTokens,
+			accessTokens,
+			ids,
+			24*time.Hour,
+			15*time.Minute,
+		)
 
-		ctx = context.Background()
+		uc = application.NewFinishInviteRegistration(
+			logger.NewNOPSlog(),
+			invites,
+			users,
+			credentials,
+			keys,
+			si,
+			registrator,
+			ids,
+			transactor,
+			24*time.Hour,
+			15*time.Minute,
+		)
 
-		transactor.On("RunInTransaction", mock.Anything, mock.AnythingOfType("func(context.Context) error")).Return(func(ctx context.Context, fn func(context.Context) error) error {
-			return fn(ctx)
-		}).Maybe()
+		// Мок транзакции: исполняет переданную замыкающую функцию
+		transactor.EXPECT().
+			RunInTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
+			RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
+				return fn(ctx)
+			}).
+			Maybe()
 	})
 
-	It("Basic Case: Valid challenge, creates entities, marks invite redeemed, issues tokens", func() {
-		challengeToken := "challenge-token"
-		regResponse := []byte("reg-response")
+	// --- Success Scenarios ---
 
-		invID := uuid.New()
-		userID := uuid.New()
-		credExternalID := []byte("external-id")
-		pubKey := []byte("pub-key")
-		transports := []string{"usb"}
+	Describe("Success Scenarios", func() {
+		It("Basic Case: Valid challenge, creates entities, preserves InitialSignCount, issues tokens", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				challengeToken := testChallengeToken
+				regResponse := []byte("reg-response")
 
-		regResult := application.RegistrationResult{
-			UserID:       userID,
-			InviteID:     invID,
-			CredentialID: credExternalID,
-			PublicKey:    pubKey,
-			Transports:   transports,
-			PRFSupported: true,
-		}
-		registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
+				invID := uuid.New()
+				userID := uuid.New()
+				credExternalID := []byte("external-id")
+				pubKey := []byte("pub-key")
+				transports := []string{testTransportUSB}
+				initialSignCount := uint32(42)
 
-		inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
-		invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
+				regResult := application.RegistrationResult{
+					UserID:           userID,
+					InviteID:         invID,
+					CredentialID:     credExternalID,
+					PublicKey:        pubKey,
+					Transports:       transports,
+					InitialSignCount: initialSignCount,
+				}
+				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
 
-		invites.EXPECT().Save(ctx, mock.MatchedBy(func(i *invite.Invite) bool {
-			return i.IsUsed() && i.ID() == invID
-		})).Return(nil).Once()
+				inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
+				invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
 
-		users.EXPECT().Save(ctx, mock.MatchedBy(func(u *user.User) bool {
-			return u.ID() == userID
-		})).Return(nil).Once()
+				invites.EXPECT().Save(ctx, mock.MatchedBy(func(i *invite.Invite) bool {
+					return i.IsUsed() && i.ID() == invID
+				})).Return(nil).Once()
 
-		newCredID := uuid.New()
-		ids.EXPECT().NewID().Return(newCredID).Once()
+				users.EXPECT().Save(ctx, mock.MatchedBy(func(u *user.User) bool {
+					return u.ID() == userID
+				})).Return(nil).Once()
 
-		credentials.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
-			return c.ID() == newCredID && c.UserID() == userID
-		})).Return(nil).Once()
+				newCredID := uuid.New()
+				ids.EXPECT().NewID().Return(newCredID).Once()
 
-		keyID := uuid.New()
-		ids.EXPECT().NewID().Return(keyID).Once()
+				credentials.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+					return c.ID() == newCredID &&
+						c.UserID() == userID &&
+						c.SignCount() == initialSignCount
+				})).Return(nil).Once()
 
-		keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
-			return len(ks) == 1 && ks[0].ID() == keyID
-		})).Return(nil).Once()
+				keyID := uuid.New()
+				ids.EXPECT().NewID().Return(keyID).Once()
 
-		expectedRefreshCode := "refresh-code"
-		refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
+				keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
+					return len(ks) == 1 && ks[0].ID() == keyID
+				})).Return(nil).Once()
 
-		sessionID := uuid.New()
-		ids.EXPECT().NewID().Return(sessionID).Once()
+				expectedRefreshCode := testRefreshCode
+				refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
 
-		sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				sessionID := uuid.New()
+				ids.EXPECT().NewID().Return(sessionID).Once()
+				sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
 
-		expectedAccessCode := "access-code"
-		accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return(expectedAccessCode, nil).Once()
+				expectedAccessCode := testAccessCode
+				accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return(expectedAccessCode, nil).Once()
 
-		in := application.FinishInviteRegistrationInput{
-			ChallengeToken:       challengeToken,
-			RegistrationResponse: regResponse,
-			WrappedKeys: []application.WrappedKeyInput{
-				{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
-			},
-			DeviceInfo: "device",
-			IPAddress:  "127.0.0.1",
-		}
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       challengeToken,
+					RegistrationResponse: regResponse,
+					WrappedKeys: []application.WrappedKeyInput{
+						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
+					},
+					DeviceInfo: "device",
+					IPAddress:  "127.0.0.1",
+				}
 
-		out, err := uc.Execute(ctx, in)
+				out, err := uc.Execute(ctx, in)
 
-		Expect(err).ToNot(HaveOccurred())
-		Expect(out).ToNot(BeNil())
-		Expect(out.AccessToken).To(Equal(expectedAccessCode))
-		Expect(out.RefreshToken).To(Equal(expectedRefreshCode))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(out).ToNot(BeNil())
+				Expect(out.AccessToken).To(Equal(expectedAccessCode))
+				Expect(out.RefreshToken).To(Equal(expectedRefreshCode))
+			})
+		})
+
+		It("Succeeds with empty WrappedKeys slice", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				challengeToken := testChallengeToken
+				regResponse := []byte("reg-response")
+				invID := uuid.New()
+				userID := uuid.New()
+
+				regResult := application.RegistrationResult{
+					UserID:           userID,
+					InviteID:         invID,
+					CredentialID:     []byte("ext"),
+					PublicKey:        []byte("pub"),
+					Transports:       []string{"usb"},
+					InitialSignCount: 0,
+				}
+				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
+
+				inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
+				invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
+				invites.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				users.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+
+				ids.EXPECT().NewID().Return(uuid.New()).Once() // Credential ID
+				credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+
+				keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
+					return len(ks) == 0
+				})).Return(nil).Once()
+
+				expectedRefreshCode := "refresh-code"
+				refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
+				ids.EXPECT().NewID().Return(uuid.New()).Once() // Session ID
+				sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return("access-code", nil).Once()
+
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       challengeToken,
+					RegistrationResponse: regResponse,
+					WrappedKeys:          []application.WrappedKeyInput{},
+				}
+
+				out, err := uc.Execute(ctx, in)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(out).ToNot(BeNil())
+			})
+		})
 	})
 
-	It("Forged/Expired Challenge (fails before transaction)", func() {
-		expectedErr := errors.New("challenge expired or invalid")
-		registrator.EXPECT().Finish(ctx, "forged-token", []byte("resp")).Return(application.RegistrationResult{}, expectedErr).Once()
+	// --- Pre-Transaction & Domain Failures ---
 
-		in := application.FinishInviteRegistrationInput{
-			ChallengeToken:       "forged-token",
-			RegistrationResponse: []byte("resp"),
-		}
+	Describe("Pre-Transaction & Domain Failures", func() {
+		It("Fails early when WebAuthn registration finish fails (e.g. forged/expired challenge)", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				expectedErr := errors.New("challenge expired or invalid")
+				registrator.EXPECT().Finish(ctx, "forged-token", []byte("resp")).Return(application.RegistrationResult{}, expectedErr).Once()
 
-		out, err := uc.Execute(ctx, in)
-		Expect(err).To(MatchError(expectedErr))
-		Expect(out).To(BeNil())
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       "forged-token",
+					RegistrationResponse: []byte("resp"),
+				}
+
+				out, err := uc.Execute(ctx, in)
+
+				Expect(err).To(MatchError(expectedErr))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("Returns ErrInviteNotFound when invite is not found in database", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				challengeToken := testChallengeToken
+				regResponse := []byte("reg-response")
+				invID := uuid.New()
+
+				regResult := application.RegistrationResult{
+					UserID:   uuid.New(),
+					InviteID: invID,
+				}
+				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
+
+				invites.EXPECT().FindByID(ctx, invID).Return(nil, domain.ErrNotFound).Once()
+
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       challengeToken,
+					RegistrationResponse: regResponse,
+				}
+
+				out, err := uc.Execute(ctx, in)
+
+				Expect(err).To(MatchError(application.ErrInviteNotFound))
+				Expect(out).To(BeNil())
+			})
+		})
 	})
 
-	It("Mid-Transaction Failure (e.g. WrappedKeySaver fails) causes rollback", func() {
-		challengeToken := "challenge-token"
-		regResponse := []byte("reg-response")
+	// --- Transaction Failures & Rollback Checks ---
 
-		invID := uuid.New()
-		userID := uuid.New()
+	Describe("Transaction Failures & Rollback Checks", func() {
+		It("Rolls back when invite redemption fails (e.g. invite already used or expired)", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				challengeToken := "challenge-token"
+				regResponse := []byte("reg-response")
+				invID := uuid.New()
+				userID := uuid.New()
 
-		regResult := application.RegistrationResult{
-			UserID:       userID,
-			InviteID:     invID,
-			CredentialID: []byte("ext"),
-			PublicKey:    []byte("pub"),
-			Transports:   []string{"usb"},
-		}
-		registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
+				regResult := application.RegistrationResult{
+					UserID:   userID,
+					InviteID: invID,
+				}
+				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
 
-		inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
-		invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
-		invites.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-		users.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-		ids.EXPECT().NewID().Return(uuid.New()).Twice()
-		credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				// Уже использованный инвайт
+				inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
+				_ = inv.Redeem(uuid.New(), time.Now())
 
-		expectedErr := errors.New("db error saving keys")
-		keys.EXPECT().SaveAll(ctx, mock.Anything).Return(expectedErr).Once()
+				invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
 
-		in := application.FinishInviteRegistrationInput{
-			ChallengeToken:       challengeToken,
-			RegistrationResponse: regResponse,
-			WrappedKeys: []application.WrappedKeyInput{
-				{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
-			},
-		}
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       challengeToken,
+					RegistrationResponse: regResponse,
+				}
 
-		out, err := uc.Execute(ctx, in)
+				out, err := uc.Execute(ctx, in)
 
-		Expect(err).To(MatchError(expectedErr))
-		Expect(out).To(BeNil())
-	})
+				Expect(err).To(MatchError(invite.ErrAlreadyUsed))
+				Expect(out).To(BeNil())
+			})
+		})
 
-	It("Empty WrappedKeys validation error", func() {
-		challengeToken := "challenge-token"
-		regResponse := []byte("reg-response")
+		It("Rolls back when WrappedKeySaver fails during transaction", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				challengeToken := "challenge-token"
+				regResponse := []byte("reg-response")
+				invID := uuid.New()
+				userID := uuid.New()
 
-		invID := uuid.New()
-		userID := uuid.New()
+				regResult := application.RegistrationResult{
+					UserID:       userID,
+					InviteID:     invID,
+					CredentialID: []byte("ext"),
+					PublicKey:    []byte("pub"),
+					Transports:   []string{"usb"},
+				}
+				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
 
-		regResult := application.RegistrationResult{
-			UserID:       userID,
-			InviteID:     invID,
-			CredentialID: []byte("ext"),
-			PublicKey:    []byte("pub"),
-			Transports:   []string{"usb"},
-		}
-		registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
+				inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
+				invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
+				invites.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				users.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				ids.EXPECT().NewID().Return(uuid.New()).Twice()
+				credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
 
-		inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
-		invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
-		invites.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-		users.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-		ids.EXPECT().NewID().Return(uuid.New()).Once() // for cred
-		credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+				expectedErr := errors.New("db error saving keys")
+				keys.EXPECT().SaveAll(ctx, mock.Anything).Return(expectedErr).Once()
 
-		keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
-			return len(ks) == 0
-		})).Return(nil).Once()
+				in := application.FinishInviteRegistrationInput{
+					ChallengeToken:       challengeToken,
+					RegistrationResponse: regResponse,
+					WrappedKeys: []application.WrappedKeyInput{
+						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
+					},
+				}
 
-		expectedRefreshCode := "refresh-code"
-		refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
-		ids.EXPECT().NewID().Return(uuid.New()).Once() // for session
-		sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-		accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return("access-code", nil).Once()
+				out, err := uc.Execute(ctx, in)
 
-		in := application.FinishInviteRegistrationInput{
-			ChallengeToken:       challengeToken,
-			RegistrationResponse: regResponse,
-			WrappedKeys:          []application.WrappedKeyInput{},
-		}
-
-		out, err := uc.Execute(ctx, in)
-
-		Expect(err).ToNot(HaveOccurred())
-		Expect(out).ToNot(BeNil())
+				Expect(err).To(MatchError(expectedErr))
+				Expect(out).To(BeNil())
+			})
+		})
 	})
 })
-
-// TODO: The user requested a test for Initial SignCount Preservation on Registration.
-// It requires `RegistrationResult` to have a `SignCount` field, which it currently does not.
-// Once `SignCount uint32` is added to `RegistrationResult` in `auth.go`, and
-// `FinishInviteRegistration` calls `cred.SetSignCount(result.SignCount)`,
-// this test can be implemented to assert the saved credential has the correct sign count.

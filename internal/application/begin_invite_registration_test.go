@@ -1,7 +1,6 @@
 package application_test
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/invite"
+	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("BeginInviteRegistration", func() {
@@ -23,7 +23,6 @@ var _ = Describe("BeginInviteRegistration", func() {
 		hashGen     *mocks.HashGenerator
 		uc          *application.BeginInviteRegistration
 
-		ctx        context.Context
 		inviteCode string
 		hashResult string
 	)
@@ -34,28 +33,36 @@ var _ = Describe("BeginInviteRegistration", func() {
 		registrator = mocks.NewRegistrator(GinkgoT())
 		hashGen = mocks.NewHashGenerator(GinkgoT())
 
-		uc = application.NewBeginInviteRegistration(invites, ids, registrator, hashGen)
+		uc = application.NewBeginInviteRegistration(logger.NewNOPSlog(), invites, ids, registrator, hashGen)
 
-		ctx = context.Background()
 		inviteCode = "raw-invite-code"
 		hashResult = "hashed-invite-code"
 	})
 
-	It("Basic Case: Valid, non-expired, unredeemed code", func() {
+	expectHashOK := func() {
 		hashGen.EXPECT().GenerateHash(inviteCode).Return(hashResult, nil).Once()
+	}
 
+	newInvite := func(ttl time.Duration, createdAt time.Time) *invite.Invite {
 		invID := uuid.New()
 		createdBy := uuid.New()
-		inv, _ := invite.New(invID, createdBy, hashResult, 24*time.Hour, time.Now())
+		inv, err := invite.New(invID, createdBy, hashResult, ttl, createdAt)
+		Expect(err).ToNot(HaveOccurred())
+		return inv
+	}
 
+	It("Basic Case: Valid, non-expired, unredeemed code", func(ctx SpecContext) {
+		expectHashOK()
+
+		inv := newInvite(24*time.Hour, time.Now())
 		invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(inv, nil).Once()
 
 		candidateUserID := uuid.New()
 		ids.EXPECT().NewID().Return(candidateUserID).Once()
 
-		expectedToken := "challenge-token"
+		expectedToken := testChallengeToken
 		expectedOpts := []byte("creation-options")
-		registrator.EXPECT().Begin(ctx, candidateUserID, invID).Return(expectedToken, expectedOpts, nil).Once()
+		registrator.EXPECT().Begin(ctx, candidateUserID, inv.ID()).Return(expectedToken, expectedOpts, nil).Once()
 
 		token, opts, err := uc.Execute(ctx, inviteCode)
 
@@ -64,52 +71,41 @@ var _ = Describe("BeginInviteRegistration", func() {
 		Expect(opts).To(Equal(expectedOpts))
 	})
 
-	It("Non-existent Code", func() {
-		hashGen.EXPECT().GenerateHash(inviteCode).Return(hashResult, nil).Once()
-		invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(nil, domain.ErrNotFound).Once()
+	DescribeTable("Invite lookup fails",
+		func(ctx SpecContext, buildResult func() (*invite.Invite, error), expectedErr error) {
+			expectHashOK()
 
-		token, opts, err := uc.Execute(ctx, inviteCode)
+			inv, findErr := buildResult()
+			invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(inv, findErr).Once()
 
-		Expect(err).To(MatchError(domain.ErrNotFound))
-		Expect(token).To(BeEmpty())
-		Expect(opts).To(BeNil())
-	})
+			token, opts, err := uc.Execute(ctx, inviteCode)
 
-	It("Expired Invite", func() {
-		hashGen.EXPECT().GenerateHash(inviteCode).Return(hashResult, nil).Once()
+			Expect(err).To(MatchError(expectedErr))
+			Expect(token).To(BeEmpty())
+			Expect(opts).To(BeNil())
+		},
+		Entry("Non-existent Code",
+			func() (*invite.Invite, error) { return nil, domain.ErrNotFound },
+			domain.ErrNotFound,
+		),
+		Entry("Expired Invite",
+			func() (*invite.Invite, error) {
+				inv := newInvite(24*time.Hour, time.Now().Add(-48*time.Hour))
+				return inv, nil
+			},
+			invite.ErrExpired,
+		),
+		Entry("Already Used Invite",
+			func() (*invite.Invite, error) {
+				inv := newInvite(24*time.Hour, time.Now())
+				inv.Redeem(uuid.New(), time.Now())
+				return inv, nil
+			},
+			invite.ErrAlreadyUsed,
+		),
+	)
 
-		invID := uuid.New()
-		createdBy := uuid.New()
-		// creation time 48 hours ago, ttl 24 hours -> expired
-		inv, _ := invite.New(invID, createdBy, hashResult, 24*time.Hour, time.Now().Add(-48*time.Hour))
-
-		invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(inv, nil).Once()
-
-		token, opts, err := uc.Execute(ctx, inviteCode)
-
-		Expect(err).To(MatchError(invite.ErrExpired))
-		Expect(token).To(BeEmpty())
-		Expect(opts).To(BeNil())
-	})
-
-	It("Already Used Invite", func() {
-		hashGen.EXPECT().GenerateHash(inviteCode).Return(hashResult, nil).Once()
-
-		invID := uuid.New()
-		createdBy := uuid.New()
-		inv, _ := invite.New(invID, createdBy, hashResult, 24*time.Hour, time.Now())
-		inv.Redeem(uuid.New(), time.Now())
-
-		invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(inv, nil).Once()
-
-		token, opts, err := uc.Execute(ctx, inviteCode)
-
-		Expect(err).To(MatchError(invite.ErrAlreadyUsed))
-		Expect(token).To(BeEmpty())
-		Expect(opts).To(BeNil())
-	})
-
-	It("Hash Generation Failure", func() {
+	It("Hash Generation Failure", func(ctx SpecContext) {
 		expectedErr := errors.New("hash generation failed")
 		hashGen.EXPECT().GenerateHash(inviteCode).Return("", expectedErr).Once()
 
@@ -120,20 +116,17 @@ var _ = Describe("BeginInviteRegistration", func() {
 		Expect(opts).To(BeNil())
 	})
 
-	It("Registrator Begin Failure", func() {
-		hashGen.EXPECT().GenerateHash(inviteCode).Return(hashResult, nil).Once()
+	It("Registrator Begin Failure", func(ctx SpecContext) {
+		expectHashOK()
 
-		invID := uuid.New()
-		createdBy := uuid.New()
-		inv, _ := invite.New(invID, createdBy, hashResult, 24*time.Hour, time.Now())
-
+		inv := newInvite(24*time.Hour, time.Now())
 		invites.EXPECT().FindByCodeHash(ctx, hashResult).Return(inv, nil).Once()
 
 		candidateUserID := uuid.New()
 		ids.EXPECT().NewID().Return(candidateUserID).Once()
 
 		expectedErr := errors.New("registrator begin failed")
-		registrator.EXPECT().Begin(ctx, candidateUserID, invID).Return("", nil, expectedErr).Once()
+		registrator.EXPECT().Begin(ctx, candidateUserID, inv.ID()).Return("", nil, expectedErr).Once()
 
 		token, opts, err := uc.Execute(ctx, inviteCode)
 

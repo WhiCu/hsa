@@ -1,7 +1,6 @@
 package application_test
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/whicu/hsa/internal/application"
 	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain/session"
+	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("SessionIssuer", func() {
@@ -22,11 +22,14 @@ var _ = Describe("SessionIssuer", func() {
 		accessTokens  *mocks.TokenIssuer
 		ids           *mocks.IDGenerator
 
-		si *application.SessionIssuer
+		refreshTTL time.Duration
+		accessTTL  time.Duration
+		si         *application.SessionIssuer
 
-		ctx    context.Context
-		userID uuid.UUID
-		now    time.Time
+		userID     uuid.UUID
+		deviceInfo string
+		ipAddress  string
+		now        time.Time
 	)
 
 	BeforeEach(func() {
@@ -35,81 +38,114 @@ var _ = Describe("SessionIssuer", func() {
 		accessTokens = mocks.NewTokenIssuer(GinkgoT())
 		ids = mocks.NewIDGenerator(GinkgoT())
 
-		ctx = context.Background()
-		userID = uuid.New()
-		now = time.Now()
+		refreshTTL = 24 * time.Hour
+		accessTTL = 15 * time.Minute
 
-		si = application.NewSessionIssuer(sessions, refreshTokens, accessTokens, ids, 24*time.Hour, 15*time.Minute)
+		si = application.NewSessionIssuer(
+			logger.NewNOPSlog(),
+			sessions,
+			refreshTokens,
+			accessTokens,
+			ids,
+			refreshTTL,
+			accessTTL,
+		)
+
+		userID = uuid.New()
+		deviceInfo = "Mozilla/5.0 (Mobile)"
+		ipAddress = "127.0.0.1"
+		now = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	})
 
-	It("Issues access and refresh tokens successfully", func() {
-		expectedRefreshCode := "refresh-code"
-		expectedRefreshHash := "refresh-hash"
-		refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, expectedRefreshHash, nil).Once()
+	// --- Helper Functions ---
 
+	expectRefreshGenOK := func(code, hash string) {
+		refreshTokens.EXPECT().GenerateToken(32).Return(code, hash, nil).Once()
+	}
+
+	expectAccessIssueOK := func(code string) {
+		accessTokens.EXPECT().IssueAccessToken(userID, accessTTL).Return(code, nil).Once()
+	}
+
+	// --- Successful Issuance ---
+
+	It("Issues access and refresh tokens successfully", func(ctx SpecContext) {
 		sessionID := uuid.New()
+		expectedRefreshCode := testRefreshCode
+		expectedRefreshHash := testRefreshHash
+		expectedAccessCode := testAccessCode
+
+		expectRefreshGenOK(expectedRefreshCode, expectedRefreshHash)
 		ids.EXPECT().NewID().Return(sessionID).Once()
 
 		sessions.EXPECT().Save(ctx, mock.MatchedBy(func(s *session.RefreshToken) bool {
-			return s.IsValid(now)
+			return s.ID() == sessionID && s.IsValid(now)
 		})).Return(nil).Once()
 
-		expectedAccessCode := "access-code"
-		accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return(expectedAccessCode, nil).Once()
+		expectAccessIssueOK(expectedAccessCode)
 
-		access, refresh, err := si.Issue(ctx, userID, "device", "127.0.0.1", now)
+		access, refresh, err := si.Issue(ctx, userID, deviceInfo, ipAddress, now)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(access).To(Equal(expectedAccessCode))
 		Expect(refresh).To(Equal(expectedRefreshCode))
 	})
 
-	It("Returns error when refresh token generation fails", func() {
-		expectedErr := errors.New("refresh token gen failed")
-		refreshTokens.EXPECT().GenerateToken(32).Return("", "", expectedErr).Once()
+	// --- Failure Scenarios ---
 
-		access, refresh, err := si.Issue(ctx, userID, "device", "127.0.0.1", now)
+	Context("Failure Scenarios", func() {
+		It("Returns error when refresh token generation fails", func(ctx SpecContext) {
+			expectedErr := errors.New("refresh token gen failed")
 
-		Expect(err).To(MatchError(expectedErr))
-		Expect(access).To(BeEmpty())
-		Expect(refresh).To(BeEmpty())
-	})
+			refreshTokens.EXPECT().GenerateToken(32).Return("", "", expectedErr).Once()
 
-	It("Returns error when refresh token save fails", func() {
-		expectedRefreshCode := "refresh-code"
-		expectedRefreshHash := "refresh-hash"
-		refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, expectedRefreshHash, nil).Once()
+			access, refresh, err := si.Issue(ctx, userID, deviceInfo, ipAddress, now)
 
-		sessionID := uuid.New()
-		ids.EXPECT().NewID().Return(sessionID).Once()
+			Expect(err).To(MatchError(expectedErr))
+			Expect(access).To(BeEmpty())
+			Expect(refresh).To(BeEmpty())
+		})
 
-		expectedErr := errors.New("session save failed")
-		sessions.EXPECT().Save(ctx, mock.Anything).Return(expectedErr).Once()
+		It("Returns error when session creation fails due to domain validation (empty token hash)", func(ctx SpecContext) {
+			expectRefreshGenOK("refresh-code", "")
+			ids.EXPECT().NewID().Return(uuid.New()).Once()
 
-		access, refresh, err := si.Issue(ctx, userID, "device", "127.0.0.1", now)
+			access, refresh, err := si.Issue(ctx, userID, deviceInfo, ipAddress, now)
 
-		Expect(err).To(MatchError(expectedErr))
-		Expect(access).To(BeEmpty())
-		Expect(refresh).To(BeEmpty())
-	})
+			Expect(err).To(MatchError(session.ErrTokenHashRequired))
+			Expect(access).To(BeEmpty())
+			Expect(refresh).To(BeEmpty())
+		})
 
-	It("Returns error when access token issue fails", func() {
-		expectedRefreshCode := "refresh-code"
-		expectedRefreshHash := "refresh-hash"
-		refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, expectedRefreshHash, nil).Once()
+		It("Returns error when refresh token save fails", func(ctx SpecContext) {
+			sessionID := uuid.New()
+			expectRefreshGenOK("refresh-code", "refresh-hash")
+			ids.EXPECT().NewID().Return(sessionID).Once()
 
-		sessionID := uuid.New()
-		ids.EXPECT().NewID().Return(sessionID).Once()
+			expectedErr := errors.New("session save failed")
+			sessions.EXPECT().Save(ctx, mock.Anything).Return(expectedErr).Once()
 
-		sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+			access, refresh, err := si.Issue(ctx, userID, deviceInfo, ipAddress, now)
 
-		expectedErr := errors.New("access token issue failed")
-		accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return("", expectedErr).Once()
+			Expect(err).To(MatchError(expectedErr))
+			Expect(access).To(BeEmpty())
+			Expect(refresh).To(BeEmpty())
+		})
 
-		access, refresh, err := si.Issue(ctx, userID, "device", "127.0.0.1", now)
+		It("Returns error when access token issue fails", func(ctx SpecContext) {
+			sessionID := uuid.New()
+			expectRefreshGenOK("refresh-code", "refresh-hash")
+			ids.EXPECT().NewID().Return(sessionID).Once()
+			sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
 
-		Expect(err).To(MatchError(expectedErr))
-		Expect(access).To(BeEmpty())
-		Expect(refresh).To(BeEmpty())
+			expectedErr := errors.New("access token issue failed")
+			accessTokens.EXPECT().IssueAccessToken(userID, accessTTL).Return("", expectedErr).Once()
+
+			access, refresh, err := si.Issue(ctx, userID, deviceInfo, ipAddress, now)
+
+			Expect(err).To(MatchError(expectedErr))
+			Expect(access).To(BeEmpty())
+			Expect(refresh).To(BeEmpty())
+		})
 	})
 })

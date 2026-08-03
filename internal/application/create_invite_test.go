@@ -2,6 +2,9 @@ package application_test
 
 import (
 	"context"
+	"errors"
+	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +15,7 @@ import (
 	"github.com/whicu/hsa/internal/application"
 	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain/invite"
+	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("CreateInvite", func() {
@@ -24,7 +28,6 @@ var _ = Describe("CreateInvite", func() {
 		ttl     time.Duration
 		uc      *application.CreateInvite
 
-		ctx       context.Context
 		createdBy uuid.UUID
 	)
 
@@ -36,63 +39,129 @@ var _ = Describe("CreateInvite", func() {
 		policy = invite.NewPolicy(3) // limit = 3
 		ttl = 24 * time.Hour
 
-		uc = application.NewCreateInvite(invites, counter, tokens, ids, policy, ttl)
+		uc = application.NewCreateInvite(logger.NewNOPSlog(), invites, counter, tokens, ids, policy, ttl)
 
-		ctx = context.Background()
 		createdBy = uuid.New()
 	})
 
-	It("Basic Case: User has 0 active invites", func() {
-		// Executing CreateInvite succeeds: creates Invite with codeHash, returns raw code once, sets ExpiresAt = now + ttl.
-		counter.EXPECT().CountActiveByUser(ctx, createdBy, mock.AnythingOfType("time.Time")).Return(0, nil).Once()
+	// --- Helper Functions ---
 
-		expectedCode := "secret-code"
-		expectedHash := "hash"
-		tokens.EXPECT().GenerateToken(32).Return(expectedCode, expectedHash, nil).Once()
+	expectTokenGenOK := func(code, hash string) {
+		tokens.EXPECT().GenerateToken(32).Return(code, hash, nil).Once()
+	}
 
-		expectedID := uuid.New()
-		ids.EXPECT().NewID().Return(expectedID).Once()
-
+	expectSaveOK := func(ctx context.Context, expectedID uuid.UUID) {
 		invites.EXPECT().Save(ctx, mock.MatchedBy(func(inv *invite.Invite) bool {
 			return inv.ID() == expectedID && inv.CreatedBy() == createdBy
 		})).Return(nil).Once()
+	}
 
-		code, expiresAt, err := uc.Execute(ctx, createdBy)
+	// --- Domain Logic & Limit Checks ---
 
-		Expect(err).ToNot(HaveOccurred())
-		Expect(code).To(Equal(expectedCode))
-		Expect(expiresAt).To(BeTemporally("~", time.Now().Add(ttl), time.Second))
-	})
+	DescribeTable("Invite count limit validation",
+		func(ctx SpecContext, activeCount int, shouldSucceed bool) {
+			synctest.Test(testT, func(_ *testing.T) {
+				now := time.Now()
 
-	It("Limit Reached: User has 3 active invites", func() {
-		// Attempting to create a 4th fails with invite.ErrTooManyActive, nothing is saved.
-		counter.EXPECT().CountActiveByUser(ctx, createdBy, mock.AnythingOfType("time.Time")).Return(3, nil).Once()
+				counter.EXPECT().
+					CountActiveByUser(ctx, createdBy, now).
+					Return(activeCount, nil).
+					Once()
 
-		code, expiresAt, err := uc.Execute(ctx, createdBy)
+				if !shouldSucceed {
+					code, expiresAt, err := uc.Execute(ctx, createdBy)
 
-		Expect(err).To(MatchError(invite.ErrTooManyActive))
-		Expect(code).To(BeEmpty())
-		Expect(expiresAt.IsZero()).To(BeTrue())
-	})
+					Expect(err).To(MatchError(invite.ErrTooManyActive))
+					Expect(code).To(BeEmpty())
+					Expect(expiresAt.IsZero()).To(BeTrue())
+					return
+				}
 
-	It("Limit Freed by Expired or Redeemed Invites", func() {
-		// The active count only counts active invites, so if the counter returns 2 (freed up space), it succeeds.
-		counter.EXPECT().CountActiveByUser(ctx, createdBy, mock.AnythingOfType("time.Time")).Return(2, nil).Once()
+				expectedCode := "secret-code"
+				expectedHash := "hash"
+				expectedID := uuid.New()
 
-		expectedCode := "secret-code-2"
-		expectedHash := "hash-2"
-		tokens.EXPECT().GenerateToken(32).Return(expectedCode, expectedHash, nil).Once()
+				expectTokenGenOK(expectedCode, expectedHash)
+				ids.EXPECT().NewID().Return(expectedID).Once()
+				expectSaveOK(ctx, expectedID)
 
-		expectedID := uuid.New()
-		ids.EXPECT().NewID().Return(expectedID).Once()
+				code, expiresAt, err := uc.Execute(ctx, createdBy)
 
-		invites.EXPECT().Save(ctx, mock.MatchedBy(func(inv *invite.Invite) bool {
-			return inv.ID() == expectedID
-		})).Return(nil).Once()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(code).To(Equal(expectedCode))
+				Expect(expiresAt).To(Equal(now.Add(ttl)))
+			})
+		},
+		Entry("Basic Case: 0 active invites", 0, true),
+		Entry("Limit Freed: 2 active invites (expired/redeemed freed up space)", 2, true),
+		Entry("Limit Reached: Exactly 3 active invites", 3, false),
+		Entry("Over Limit: 4 active invites", 4, false),
+	)
 
-		code, _, err := uc.Execute(ctx, createdBy)
+	// --- Infrastructure Failures ---
 
-		Expect(err).ToNot(HaveOccurred())
-		Expect(code).To(Equal(expectedCode))
+	Context("Infrastructure Failures", func() {
+		It("Fails when ActiveInviteCounter returns a database error", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				now := time.Now()
+				dbErr := errors.New("db failure: failed to count active invites")
+
+				counter.EXPECT().
+					CountActiveByUser(ctx, createdBy, now).
+					Return(0, dbErr).
+					Once()
+
+				code, expiresAt, err := uc.Execute(ctx, createdBy)
+
+				Expect(err).To(MatchError(dbErr))
+				Expect(code).To(BeEmpty())
+				Expect(expiresAt.IsZero()).To(BeTrue())
+			})
+		})
+
+		It("Fails when TokenGenerator returns an entropy error", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				now := time.Now()
+
+				counter.EXPECT().
+					CountActiveByUser(ctx, createdBy, now).
+					Return(0, nil).
+					Once()
+
+				tokenErr := errors.New("crypto entropy error")
+				tokens.EXPECT().GenerateToken(32).Return("", "", tokenErr).Once()
+
+				code, expiresAt, err := uc.Execute(ctx, createdBy)
+
+				Expect(err).To(MatchError(tokenErr))
+				Expect(code).To(BeEmpty())
+				Expect(expiresAt.IsZero()).To(BeTrue())
+			})
+		})
+
+		It("Fails when InviteSaver fails to persist the invite", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				now := time.Now()
+
+				counter.EXPECT().
+					CountActiveByUser(ctx, createdBy, now).
+					Return(0, nil).
+					Once()
+
+				expectTokenGenOK("secret-code", "hash")
+
+				expectedID := uuid.New()
+				ids.EXPECT().NewID().Return(expectedID).Once()
+
+				saveErr := errors.New("db insert failure")
+				invites.EXPECT().Save(ctx, mock.Anything).Return(saveErr).Once()
+
+				code, expiresAt, err := uc.Execute(ctx, createdBy)
+
+				Expect(err).To(MatchError(saveErr))
+				Expect(code).To(BeEmpty())
+				Expect(expiresAt.IsZero()).To(BeTrue())
+			})
+		})
 	})
 })

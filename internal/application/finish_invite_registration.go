@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain"
@@ -36,6 +37,7 @@ type Transactor interface {
 }
 
 type FinishInviteRegistration struct {
+	log           *slog.Logger
 	invites       InviteFinderByID
 	users         UserSaver
 	credentials   CredentialSaver
@@ -49,6 +51,7 @@ type FinishInviteRegistration struct {
 }
 
 func NewFinishInviteRegistration(
+	log *slog.Logger,
 	invites InviteFinderByID,
 	users UserSaver,
 	credentials CredentialSaver,
@@ -61,6 +64,7 @@ func NewFinishInviteRegistration(
 	accessTTL time.Duration,
 ) *FinishInviteRegistration {
 	return &FinishInviteRegistration{
+		log:           log,
 		invites:       invites,
 		users:         users,
 		credentials:   credentials,
@@ -95,74 +99,134 @@ type FinishInviteRegistrationOutput struct {
 }
 
 func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInviteRegistrationInput) (*FinishInviteRegistrationOutput, error) {
+	ig.log.DebugContext(ctx, "executing finish invite registration")
+
 	now := time.Now()
 
 	result, err := ig.registrator.Finish(ctx, in.ChallengeToken, in.RegistrationResponse)
 	if err != nil {
+		ig.log.ErrorContext(ctx, "failed to finish webauthn registration", slog.Any("error", err))
 		return nil, err
 	}
 
 	var out FinishInviteRegistrationOutput
 
 	err = ig.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
-		inv, txErr := ig.invites.FindByID(ctx, result.InviteID)
-		if txErr != nil {
-			if errors.Is(txErr, domain.ErrNotFound) {
-				return ErrInviteNotFound
-			}
-			return txErr
-		}
-		if txErr = inv.Redeem(result.UserID, now); txErr != nil {
-			return txErr
-		}
-		if txErr = ig.invites.Save(ctx, inv); txErr != nil {
-			return txErr
-		}
-
-		u, txErr := user.New(result.UserID, inv.CreatedBy(), now)
+		inv, txErr := ig.redeemInvite(ctx, result.InviteID, result.UserID, now)
 		if txErr != nil {
 			return txErr
 		}
-		if txErr = ig.users.Save(ctx, u); txErr != nil {
-			return txErr
-		}
 
-		newCredID := ig.ids.NewID()
-		cred, txErr := credential.New(newCredID, result.CredentialID, u.ID(), result.PublicKey, result.Transports, now)
+		u, cred, txErr := ig.createUserAndCredential(ctx, result, inv.CreatedBy(), now)
 		if txErr != nil {
 			return txErr
 		}
-		if txErr = ig.credentials.Save(ctx, cred); txErr != nil {
-			return txErr
-		}
 
-		wrapped := make([]*key.WrappedKey, 0, len(in.WrappedKeys))
-		for _, wk := range in.WrappedKeys {
-			var credID *credential.CredentialID
-			if !wk.ViaRecovery {
-				cid := cred.ID()
-				credID = &cid
-			}
-			k, kErr := key.New(ig.ids.NewID(), u.ID(), credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
-			if kErr != nil {
-				return kErr
-			}
-			wrapped = append(wrapped, k)
-		}
-		if txErr = ig.keys.SaveAll(ctx, wrapped); txErr != nil {
+		if txErr = ig.saveWrappedKeys(ctx, u.ID(), cred.ID(), in.WrappedKeys, now); txErr != nil {
 			return txErr
 		}
 
 		access, refresh, txErr := ig.sessionIssuer.Issue(ctx, u.ID(), in.DeviceInfo, in.IPAddress, now)
 		if txErr != nil {
+			ig.log.ErrorContext(ctx, "failed to issue session tokens", slog.String("user_id", u.ID().String()), slog.Any("error", txErr))
 			return txErr
 		}
 
 		out = FinishInviteRegistrationOutput{AccessToken: access, RefreshToken: refresh}
 		return nil
 	})
+
 	if err != nil {
+		ig.log.ErrorContext(ctx, "finish invite registration transaction failed",
+			slog.String("user_id", result.UserID.String()),
+			slog.String("invite_id", result.InviteID.String()),
+			slog.Any("error", err),
+		)
 		return nil, err
 	}
+
+	ig.log.InfoContext(ctx, "invite registration successfully finished",
+		slog.String("user_id", result.UserID.String()),
+		slog.String("invite_id", result.InviteID.String()),
+		slog.Int("keys_count", len(in.WrappedKeys)),
+	)
+
 	return &out, nil
+}
+
+// --- Internal Transaction Helpers ---
+
+func (ig *FinishInviteRegistration) redeemInvite(ctx context.Context, inviteID invite.InviteID, userID user.UserID, now time.Time) (*invite.Invite, error) {
+	inv, err := ig.invites.FindByID(ctx, inviteID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			ig.log.WarnContext(ctx, "invite not found during registration finish", slog.String("invite_id", inviteID.String()))
+			return nil, ErrInviteNotFound
+		}
+		ig.log.ErrorContext(ctx, "failed to find invite by id", slog.String("invite_id", inviteID.String()), slog.Any("error", err))
+		return nil, err
+	}
+
+	if err = inv.Redeem(userID, now); err != nil {
+		ig.log.WarnContext(ctx, "failed to redeem invite", slog.String("invite_id", inv.ID().String()), slog.Any("error", err))
+		return nil, err
+	}
+
+	if err = ig.invites.Save(ctx, inv); err != nil {
+		ig.log.ErrorContext(ctx, "failed to save redeemed invite", slog.String("invite_id", inv.ID().String()), slog.Any("error", err))
+		return nil, err
+	}
+
+	return inv, nil
+}
+
+func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context, res RegistrationResult, createdBy user.UserID, now time.Time) (*user.User, *credential.Credential, error) {
+	u, err := user.New(res.UserID, createdBy, now)
+	if err != nil {
+		ig.log.ErrorContext(ctx, "failed to create user domain entity", slog.String("user_id", res.UserID.String()), slog.Any("error", err))
+		return nil, nil, err
+	}
+
+	if err = ig.users.Save(ctx, u); err != nil {
+		ig.log.ErrorContext(ctx, "failed to save user", slog.String("user_id", u.ID().String()), slog.Any("error", err))
+		return nil, nil, err
+	}
+
+	newCredID := ig.ids.NewID()
+	cred, err := credential.New(newCredID, res.CredentialID, u.ID(), res.PublicKey, res.Transports, now)
+	if err != nil {
+		ig.log.ErrorContext(ctx, "failed to create credential domain entity", slog.String("user_id", u.ID().String()), slog.Any("error", err))
+		return nil, nil, err
+	}
+	cred.SetSignCount(res.InitialSignCount)
+
+	if err = ig.credentials.Save(ctx, cred); err != nil {
+		ig.log.ErrorContext(ctx, "failed to save credential", slog.String("credential_id", cred.ID().String()), slog.Any("error", err))
+		return nil, nil, err
+	}
+
+	return u, cred, nil
+}
+
+func (ig *FinishInviteRegistration) saveWrappedKeys(ctx context.Context, userID user.UserID, credID credential.CredentialID, keyInputs []WrappedKeyInput, now time.Time) error {
+	wrapped := make([]*key.WrappedKey, 0, len(keyInputs))
+	for _, wk := range keyInputs {
+		var cid *credential.CredentialID
+		if !wk.ViaRecovery {
+			cid = &credID
+		}
+		k, kErr := key.New(ig.ids.NewID(), userID, cid, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
+		if kErr != nil {
+			ig.log.ErrorContext(ctx, "failed to create wrapped key domain entity", slog.String("user_id", userID.String()), slog.Any("error", kErr))
+			return kErr
+		}
+		wrapped = append(wrapped, k)
+	}
+
+	if err := ig.keys.SaveAll(ctx, wrapped); err != nil {
+		ig.log.ErrorContext(ctx, "failed to save wrapped keys", slog.String("user_id", userID.String()), slog.Int("keys_count", len(wrapped)), slog.Any("error", err))
+		return err
+	}
+
+	return nil
 }

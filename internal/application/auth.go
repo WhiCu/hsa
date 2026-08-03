@@ -9,12 +9,12 @@ import (
 )
 
 type RegistrationResult struct {
-	UserID       user.UserID
-	InviteID     invite.InviteID
-	CredentialID credential.ExternalID
-	PublicKey    []byte
-	Transports   []string
-	PRFSupported bool
+	UserID           user.UserID
+	InviteID         invite.InviteID
+	CredentialID     credential.ExternalID
+	PublicKey        []byte
+	Transports       []string
+	InitialSignCount uint32
 }
 
 type Registrator interface {
