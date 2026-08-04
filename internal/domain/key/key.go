@@ -2,6 +2,7 @@ package key
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,3 +78,15 @@ func New(
 func (k *WrappedKey) ID() WrappedKeyID                       { return k.id }
 func (k *WrappedKey) Scope() Scope                           { return k.scope }
 func (k *WrappedKey) CredentialID() *credential.CredentialID { return k.credentialID }
+
+// SECURITY: never log this field
+func (k *WrappedKey) String() string {
+	if k == nil {
+		return "<nil>"
+	}
+	credID := "<nil>"
+	if k.credentialID != nil {
+		credID = k.credentialID.String()
+	}
+	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, credID, k.scope, k.wrapAlgorithm)
+}

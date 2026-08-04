@@ -30,6 +30,18 @@ func genValidUUID() *rapid.Generator[uuid.UUID] {
 var _ = Describe("RefreshToken Domain", func() {
 
 	Context("Constructor validation", func() {
+		It("should redact sensitive fields in String()", func() {
+			rt, err := session.New(uuid.New(), uuid.New(), "secret-token-hash", "device", "127.0.0.1", time.Hour, time.Now())
+			Expect(err).NotTo(HaveOccurred())
+
+			str := rt.String()
+			Expect(str).To(ContainSubstring("***REDACTED***"))
+			Expect(str).NotTo(ContainSubstring("secret-token-hash"))
+
+			var nilToken *session.RefreshToken
+			Expect(nilToken.String()).To(Equal("<nil>"))
+		})
+
 		DescribeTable("Invalid initialization",
 			func(id session.RefreshTokenID, uID user.UserID, tokenHash string, expectedErr error) {
 				rt, err := session.New(id, uID, tokenHash, "device", "127.0.0.1", time.Hour, time.Now())
