@@ -14,7 +14,10 @@ type SecretManager struct {
 }
 
 // SECURITY: never log this field
-func (sm SecretManager) String() string {
+func (sm *SecretManager) String() string {
+	if sm == nil {
+		return "<nil>"
+	}
 	return "SecretManager{secretKey: ***REDACTED***}"
 }
 

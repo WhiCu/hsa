@@ -78,6 +78,9 @@ func (t *RefreshToken) Revoke(now time.Time) error {
 }
 
 // SECURITY: never log this field
-func (t RefreshToken) String() string {
-	return fmt.Sprintf("RefreshToken{id: %s, userID: %s, tokenHash: ***REDACTED***, deviceInfo: %s, ipAddress: %s, expiresAt: %s, revokedAt: %v, createdAt: %s}", t.id.String(), t.userID.String(), t.deviceInfo, t.ipAddress, t.expiresAt.String(), t.revokedAt, t.createdAt.String())
+func (t *RefreshToken) String() string {
+	if t == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RefreshToken{id: %v, userID: %v, tokenHash: ***REDACTED***, deviceInfo: %v, ipAddress: %v, expiresAt: %v, revokedAt: %v, createdAt: %v}", t.id, t.userID, t.deviceInfo, t.ipAddress, t.expiresAt, t.revokedAt, t.createdAt)
 }

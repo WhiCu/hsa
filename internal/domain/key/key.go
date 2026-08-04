@@ -80,10 +80,13 @@ func (k *WrappedKey) Scope() Scope                           { return k.scope }
 func (k *WrappedKey) CredentialID() *credential.CredentialID { return k.credentialID }
 
 // SECURITY: never log this field
-func (k WrappedKey) String() string {
+func (k *WrappedKey) String() string {
+	if k == nil {
+		return "<nil>"
+	}
 	credID := "<nil>"
 	if k.credentialID != nil {
 		credID = k.credentialID.String()
 	}
-	return fmt.Sprintf("WrappedKey{id: %s, userID: %s, credentialID: %s, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %s}", k.id.String(), k.userID.String(), credID, k.scope, k.wrapAlgorithm)
+	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, credID, k.scope, k.wrapAlgorithm)
 }
