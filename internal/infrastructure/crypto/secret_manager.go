@@ -13,6 +13,11 @@ type SecretManager struct {
 	secretKey []byte
 }
 
+// SECURITY: never log this field
+func (sm SecretManager) String() string {
+	return "SecretManager{secretKey: ***REDACTED***}"
+}
+
 func (sm *SecretManager) GenerateHash(raw string) (string, error) {
 	return generateHashBase32(raw, sm.secretKey)
 }

@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,4 +75,9 @@ func (t *RefreshToken) Revoke(now time.Time) error {
 	}
 	t.revokedAt = &now
 	return nil
+}
+
+// SECURITY: never log this field
+func (t RefreshToken) String() string {
+	return fmt.Sprintf("RefreshToken{id: %s, userID: %s, tokenHash: ***REDACTED***, deviceInfo: %s, ipAddress: %s, expiresAt: %s, revokedAt: %v, createdAt: %s}", t.id.String(), t.userID.String(), t.deviceInfo, t.ipAddress, t.expiresAt.String(), t.revokedAt, t.createdAt.String())
 }

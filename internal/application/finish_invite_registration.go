@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -83,6 +84,11 @@ type WrappedKeyInput struct {
 	WrappedDEK    []byte
 	WrapAlgorithm string
 	ViaRecovery   bool
+}
+
+// SECURITY: never log this field
+func (w WrappedKeyInput) String() string {
+	return fmt.Sprintf("WrappedKeyInput{Scope: %d, WrappedDEK: ***REDACTED***, WrapAlgorithm: %s, ViaRecovery: %t}", w.Scope, w.WrapAlgorithm, w.ViaRecovery)
 }
 
 type FinishInviteRegistrationInput struct {
