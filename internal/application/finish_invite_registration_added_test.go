@@ -2,6 +2,7 @@ package application
 
 import (
 	"testing"
+
 	"github.com/whicu/hsa/internal/domain/key"
 )
 
