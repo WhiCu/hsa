@@ -60,6 +60,27 @@ var _ = Describe("WrappedKey", func() {
 	})
 
 	Context("Property-Based Testing", func() {
+		It("should redact sensitive fields in String()", func() {
+			cID := uuid.New()
+			wk, err := key.New(uuid.New(), uuid.New(), &cID, key.ScopeMain, []byte("super-secret-dek"), "AES-256-GCM", time.Now())
+			Expect(err).NotTo(HaveOccurred())
+
+			str := wk.String()
+			Expect(str).To(ContainSubstring("***REDACTED***"))
+			Expect(str).NotTo(ContainSubstring("super-secret-dek"))
+
+			var nilKey *key.WrappedKey
+			Expect(nilKey.String()).To(Equal("<nil>"))
+		})
+
+		It("should handle nil credentialID in String()", func() {
+			wk, err := key.New(uuid.New(), uuid.New(), nil, key.ScopeMain, []byte("super-secret-dek"), "AES-256-GCM", time.Now())
+			Expect(err).NotTo(HaveOccurred())
+
+			str := wk.String()
+			Expect(str).To(ContainSubstring("credentialID: <nil>"))
+		})
+
 		It("should construct valid keys for any valid parameter combination", func() {
 			rapid.Check(GinkgoT(), func(t *rapid.T) {
 				id := genValidUUID().Draw(t, "id")
