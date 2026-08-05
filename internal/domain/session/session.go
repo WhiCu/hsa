@@ -57,13 +57,10 @@ func New(
 	}, nil
 }
 
-func (t *RefreshToken) ID() RefreshTokenID {
-	return t.id
-}
-
-func (t *RefreshToken) UserID() user.UserID {
-	return t.userID
-}
+func (t *RefreshToken) ID() RefreshTokenID  { return t.id }
+func (t *RefreshToken) UserID() user.UserID { return t.userID }
+func (t *RefreshToken) DeviceInfo() string  { return t.deviceInfo }
+func (t *RefreshToken) IPAddress() string   { return t.ipAddress }
 
 func (t *RefreshToken) IsValid(now time.Time) bool {
 	return t.revokedAt == nil && now.Before(t.expiresAt)
