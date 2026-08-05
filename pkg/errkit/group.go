@@ -21,6 +21,9 @@ func (g *Group) Add(err error) {
 }
 
 func (g *Group) Go(f func() error) {
+	if f == nil {
+		return
+	}
 	g.wg.Go(func() {
 		if err := f(); err != nil {
 			g.Add(err)
@@ -29,6 +32,9 @@ func (g *Group) Go(f func() error) {
 }
 
 func (g *Group) Finally(f func() error) {
+	if f == nil {
+		return
+	}
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	g.finally = append(g.finally, f)
