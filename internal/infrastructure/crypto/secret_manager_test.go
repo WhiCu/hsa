@@ -1,19 +1,21 @@
-package crypto
+package crypto_test
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/whicu/hsa/internal/infrastructure/crypto"
 )
 
-func TestSecretManager_String(t *testing.T) {
-	sm := &SecretManager{secretKey: []byte("very-secret-key")}
-	str := sm.String()
+var _ = Describe("ChallengeCodec", func() {
+	Context("SecretManager Helper Functions", func() {
+		It("String", func() {
+			sm := crypto.NewSecretManager([]byte("my-secret-key"))
+			str := sm.String()
 
-	if str != "SecretManager{secretKey: ***REDACTED***}" {
-		t.Errorf("Expected string to be redacted, got: %s", str)
-	}
+			Expect(str).To(Equal("SecretManager{secretKey: ***REDACTED***}"))
 
-	var nilSM *SecretManager
-	if nilSM.String() != "<nil>" {
-		t.Errorf("Expected <nil> for nil SecretManager, got: %s", nilSM.String())
-	}
-}
+			var nilSM *crypto.SecretManager
+			Expect(nilSM.String()).To(Equal("<nil>"))
+		})
+	})
+})

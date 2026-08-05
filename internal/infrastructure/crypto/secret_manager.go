@@ -13,6 +13,10 @@ type SecretManager struct {
 	secretKey []byte
 }
 
+func NewSecretManager(secretKey []byte) *SecretManager {
+	return &SecretManager{secretKey: secretKey}
+}
+
 // SECURITY: never log this field
 func (sm *SecretManager) String() string {
 	if sm == nil {
