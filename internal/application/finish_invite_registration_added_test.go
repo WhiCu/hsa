@@ -11,11 +11,10 @@ func TestWrappedKeyInput_String(t *testing.T) {
 		Scope:         key.ScopeMain,
 		WrappedDEK:    []byte("my-secret-dek"),
 		WrapAlgorithm: "AES-256-GCM",
-		ViaRecovery:   true,
 	}
 
 	str := wki.String()
-	expected := "WrappedKeyInput{Scope: 0, WrappedDEK: ***REDACTED***, WrapAlgorithm: AES-256-GCM, ViaRecovery: true}"
+	expected := "WrappedKeyInput{Scope: 0, WrappedDEK: ***REDACTED***, WrapAlgorithm: AES-256-GCM, ViaRecovery: false}"
 
 	if str != expected {
 		t.Errorf("Expected %s, got: %s", expected, str)
