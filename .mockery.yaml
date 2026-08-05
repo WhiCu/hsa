@@ -10,3 +10,8 @@ packages:
     config:
       all: true
       pkgname: "mocks"
+
+  github.com/whicu/hsa/internal/infrastructure/auth/webauthn:
+    config:
+      all: true
+      pkgname: "mocks"

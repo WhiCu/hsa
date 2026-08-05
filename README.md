@@ -3,6 +3,7 @@
 [![CI](https://github.com/whicu/hsa/actions/workflows/ci.yml/badge.svg)](https://github.com/whicu/hsa/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/whicu/hsa)](https://goreportcard.com/report/github.com/whicu/hsa)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/whicu/hsa)](go.mod)
+
 Микросервис аутентификации, управления инвайтами и хранения обёрнутых ключей шифрования для домашнего сервисa.
 
 Сервис реализует подход Zero-Knowledge: он отвечает за проверку подлинности пользователя через Passkey (WebAuthn), но никогда не имеет доступа к необработанным ключам шифрования (DEK).
