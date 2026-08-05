@@ -2,21 +2,21 @@ package webauthnadapter
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
-	"log/slog"
 
-	"github.com/google/uuid"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
 )
 
 type mockChallenge struct{}
 
-func (m *mockChallenge) Encode(payload any, ttl time.Duration) (string, error) {
+func (m *mockChallenge) Encode(_ any, _ time.Duration) (string, error) {
 	return "token", nil
 }
 
-func (m *mockChallenge) Decode(token string, out any) error {
+func (m *mockChallenge) Decode(_ string, _ any) error {
 	return nil
 }
 

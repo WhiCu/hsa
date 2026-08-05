@@ -8,6 +8,9 @@ import (
 type ErrorFormatFunc func([]error) string
 
 func ListFormatFunc(es []error) string {
+	if len(es) == 0 {
+		return ""
+	}
 	if len(es) == 1 {
 		return fmt.Sprintf("1 error occurred:\n\t* %s\n\n", es[0])
 	}
