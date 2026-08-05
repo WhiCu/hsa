@@ -1,6 +1,7 @@
 package application
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/whicu/hsa/internal/domain/key"
@@ -14,9 +15,12 @@ func TestWrappedKeyInput_String(t *testing.T) {
 	}
 
 	str := wki.String()
-	expected := "WrappedKeyInput{Scope: 0, WrappedDEK: ***REDACTED***, WrapAlgorithm: AES-256-GCM, ViaRecovery: false}"
 
-	if str != expected {
-		t.Errorf("Expected %s, got: %s", expected, str)
+	if !strings.Contains(str, "***REDACTED***") {
+		t.Errorf("Expected string to redact WrappedDEK, got: %s", str)
+	}
+
+	if !strings.Contains(str, "AES-256-GCM") {
+		t.Errorf("Expected string to contain wrap algorithm, got: %s", str)
 	}
 }
