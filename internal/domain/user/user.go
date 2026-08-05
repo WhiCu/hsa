@@ -15,6 +15,14 @@ var (
 
 type UserID = uuid.UUID
 
+func NewUserID(bytes []byte) (UserID, error) {
+	id, err := uuid.FromBytes(bytes)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
+}
+
 type User struct {
 	id        UserID
 	invitedBy *UserID

@@ -111,4 +111,14 @@ var _ = Describe("User", func() {
 			})
 		})
 	})
+	Context("User Helper Functions", func() {
+		It("Create UserID", func() {
+			rapid.Check(GinkgoT(), func(t *rapid.T) {
+				bytes := rapid.SliceOfN(rapid.Byte(), 16, 16).Draw(t, "rawUUID")
+				id, err := user.NewUserID(bytes)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(id).To(Equal(uuid.UUID(bytes)))
+			})
+		})
+	})
 })
