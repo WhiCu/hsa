@@ -11,7 +11,6 @@ func TestWrappedKeyInput_String(t *testing.T) {
 		Scope:         key.ScopeMain,
 		WrappedDEK:    []byte("my-secret-dek"),
 		WrapAlgorithm: "AES-256-GCM",
-		ViaRecovery:   false,
 	}
 
 	str := wki.String()
