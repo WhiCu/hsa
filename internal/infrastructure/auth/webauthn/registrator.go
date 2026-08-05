@@ -30,13 +30,14 @@ type challengePayload struct {
 }
 
 type webauthnUser struct {
-	id user.UserID
+	id          user.UserID
+	credentials []gowebauthn.Credential
 }
 
-func (u *webauthnUser) WebAuthnID() []byte                           { b := u.id; return b[:] }
+func (u *webauthnUser) WebAuthnID() []byte                           { return u.id[:] }
 func (u *webauthnUser) WebAuthnName() string                         { return u.id.String() }
 func (u *webauthnUser) WebAuthnDisplayName() string                  { return u.id.String() }
-func (u *webauthnUser) WebAuthnCredentials() []gowebauthn.Credential { return nil }
+func (u *webauthnUser) WebAuthnCredentials() []gowebauthn.Credential { return u.credentials }
 
 type Registrator struct {
 	log       *slog.Logger
