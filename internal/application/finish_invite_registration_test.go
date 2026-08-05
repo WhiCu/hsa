@@ -150,7 +150,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 					ChallengeToken:       challengeToken,
 					RegistrationResponse: regResponse,
 					WrappedKeys: []application.WrappedKeyInput{
-						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
+						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg"},
 					},
 					DeviceInfo: "device",
 					IPAddress:  "127.0.0.1",
@@ -325,7 +325,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 					ChallengeToken:       challengeToken,
 					RegistrationResponse: regResponse,
 					WrappedKeys: []application.WrappedKeyInput{
-						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg", ViaRecovery: false},
+						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg"},
 					},
 				}
 
@@ -334,6 +334,19 @@ var _ = Describe("FinishInviteRegistration", func() {
 				Expect(err).To(MatchError(expectedErr))
 				Expect(out).To(BeNil())
 			})
+		})
+	})
+	Context("FinishInviteRegistration Helper Functions", func() {
+		It("WrappedKeyInput String", func() {
+			wki := application.WrappedKeyInput{
+				Scope:         key.ScopeMain,
+				WrappedDEK:    []byte("my-secret-dek"),
+				WrapAlgorithm: "AES-256-GCM",
+			}
+
+			str := wki.String()
+			expected := "WrappedKeyInput{Scope: 0, WrappedDEK: ***REDACTED***, WrapAlgorithm: AES-256-GCM}"
+			Expect(str).To(Equal(expected))
 		})
 	})
 })

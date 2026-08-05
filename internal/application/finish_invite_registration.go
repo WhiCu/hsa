@@ -83,12 +83,11 @@ type WrappedKeyInput struct {
 	Scope         key.Scope
 	WrappedDEK    []byte
 	WrapAlgorithm string
-	ViaRecovery   bool
 }
 
 // SECURITY: never log this field
 func (w WrappedKeyInput) String() string {
-	return fmt.Sprintf("WrappedKeyInput{Scope: %d, WrappedDEK: ***REDACTED***, WrapAlgorithm: %s, ViaRecovery: %t}", w.Scope, w.WrapAlgorithm, w.ViaRecovery)
+	return fmt.Sprintf("WrappedKeyInput{Scope: %d, WrappedDEK: ***REDACTED***, WrapAlgorithm: %s}", w.Scope, w.WrapAlgorithm)
 }
 
 type FinishInviteRegistrationInput struct {
@@ -220,11 +219,7 @@ func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context,
 func (ig *FinishInviteRegistration) saveWrappedKeys(ctx context.Context, userID user.UserID, credID credential.CredentialID, keyInputs []WrappedKeyInput, now time.Time) error {
 	wrapped := make([]*key.WrappedKey, 0, len(keyInputs))
 	for _, wk := range keyInputs {
-		var cid *credential.CredentialID
-		if !wk.ViaRecovery {
-			cid = &credID
-		}
-		k, kErr := key.New(ig.ids.NewID(), userID, cid, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
+		k, kErr := key.New(ig.ids.NewID(), userID, &credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
 		if kErr != nil {
 			ig.log.ErrorContext(ctx, "failed to create wrapped key domain entity", slog.String("user_id", userID.String()), slog.Any("error", kErr))
 			return kErr
