@@ -76,24 +76,6 @@ var _ = Describe("Registrator", func() {
 			Expect(token).To(BeEmpty())
 			Expect(optsJSON).To(BeNil())
 		})
-
-		It("should fail if webauthn config is invalid", func(ctx SpecContext) {
-			invalidWA, err := gowebauthn.New(&gowebauthn.Config{
-				RPDisplayName: "",
-				RPID:          "",
-			})
-			if err != nil {
-				Skip("invalid webauthn config is now rejected at construction time")
-			}
-
-			regInvalid := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), invalidWA, codec, ttl)
-
-			token, optsJSON, err := regInvalid.Begin(ctx, userID, inviteID)
-
-			Expect(err).To(HaveOccurred())
-			Expect(token).To(BeEmpty())
-			Expect(optsJSON).To(BeNil())
-		})
 	})
 
 	Describe("Finish", func() {
@@ -124,31 +106,5 @@ var _ = Describe("Registrator", func() {
 			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
 			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
-
-		// It("should return error when WebAuthn credential creation verification fails", func(ctx SpecContext) {
-		// 	codec.EXPECT().
-		// 		Decode(testChallengeToken, mock.Anything).
-		// 		Return(nil).
-		// 		Once()
-
-		// 	parsed, err := protocol.ParseCredentialCreationResponseBytes([]byte(`{
-		// 		"id": "dGVzdC1jcmVkLWlk",
-		// 		"rawId": "dGVzdC1jcmVkLWlk",
-		// 		"type": "public-key",
-		// 		"response": {
-		// 			"clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoidGVzdCIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA4MCJ9",
-		// 			"attestationObject": "o2NmbXRub25lZ2F0dFN0bXSAaGF1dGhEYXRhWCVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		// 		}
-		// 	}`))
-		// 	Expect(err).NotTo(HaveOccurred())
-
-		// 	rawBytes, err := json.Marshal(parsed.Raw)
-		// 	Expect(err).NotTo(HaveOccurred())
-
-		// 	res, err := reg.Finish(ctx, testChallengeToken, rawBytes)
-
-		// 	Expect(err).To(HaveOccurred())
-		// 	Expect(res.UserID).To(Equal(uuid.Nil))
-		// })
 	})
 })

@@ -5,19 +5,20 @@ import (
 
 	"aidanwoods.dev/go-paseto"
 	gowebauthn "github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	webauthnadapter "github.com/whicu/hsa/internal/infrastructure/auth/webauthn"
+	"github.com/whicu/hsa/internal/infrastructure/auth/webauthn/mocks"
 	"github.com/whicu/hsa/internal/infrastructure/crypto"
 	"github.com/whicu/hsa/pkg/logger"
 )
 
-var _ = Describe("RegistratorWithSecretCodec", func() {
+var _ = Describe("AuthenticatorWithSecretCodec", func() {
 	var (
 		wa          *gowebauthn.WebAuthn
 		secretCodec *crypto.SecretCodec
-		reg         *webauthnadapter.Registrator
+		credsProv   *mocks.CredentialsProvider
+		auth        *webauthnadapter.Authenticator
 		ttl         time.Duration
 	)
 
@@ -25,15 +26,13 @@ var _ = Describe("RegistratorWithSecretCodec", func() {
 		wa = newTestWebAuthn(GinkgoT())
 		pasetoKey := paseto.NewV4SymmetricKey()
 		secretCodec = crypto.NewSecretCodec(pasetoKey)
+		credsProv = mocks.NewCredentialsProvider(GinkgoT())
 		ttl = 5 * time.Minute
-		reg = webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, secretCodec, ttl)
+		auth = webauthnadapter.NewAuthenticator(logger.NewNOPSlog(), wa, secretCodec, credsProv, ttl)
 	})
 
 	It("should successfully execute full Begin flow and generate a valid decryptable PASETO token", func(ctx SpecContext) {
-		userID := uuid.New()
-		inviteID := uuid.New()
-
-		tokenStr, optsJSON, err := reg.Begin(ctx, userID, inviteID)
+		tokenStr, optsJSON, err := auth.Begin(ctx)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(tokenStr).NotTo(BeEmpty())
@@ -43,37 +42,30 @@ var _ = Describe("RegistratorWithSecretCodec", func() {
 		err = secretCodec.Decode(tokenStr, &decoded)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(decoded).To(HaveKey("session_data"))
-		Expect(decoded).To(HaveKey("invite_id"))
-		Expect(decoded).To(HaveKey("user_id"))
 	})
 
 	It("should reject Finish operation when PASETO token is expired", func(ctx SpecContext) {
-		expiredReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, secretCodec, -time.Minute)
+		expiredAuth := webauthnadapter.NewAuthenticator(logger.NewNOPSlog(), wa, secretCodec, credsProv, -time.Minute)
 
-		userID := uuid.New()
-		inviteID := uuid.New()
-
-		expiredToken, _, err := expiredReg.Begin(ctx, userID, inviteID)
+		expiredToken, _, err := expiredAuth.Begin(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
-		res, err := reg.Finish(ctx, expiredToken, []byte("{}"))
+		res, err := auth.Finish(ctx, expiredToken, []byte("{}"))
 
 		Expect(err).To(MatchError(webauthnadapter.ErrChallengeExpired))
-		Expect(res.UserID).To(Equal(uuid.Nil))
+		Expect(res.UserID.String()).To(Equal("00000000-0000-0000-0000-000000000000"))
 	})
+
 	It("should reject Finish operation when token is tampered or signed with a different key", func(ctx SpecContext) {
 		otherCodec := crypto.NewSecretCodec(paseto.NewV4SymmetricKey())
-		otherReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, otherCodec, ttl)
+		otherAuth := webauthnadapter.NewAuthenticator(logger.NewNOPSlog(), wa, otherCodec, credsProv, ttl)
 
-		userID := uuid.New()
-		inviteID := uuid.New()
-
-		tamperedToken, _, err := otherReg.Begin(ctx, userID, inviteID)
+		tamperedToken, _, err := otherAuth.Begin(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
-		res, err := reg.Finish(ctx, tamperedToken, []byte("{}"))
+		res, err := auth.Finish(ctx, tamperedToken, []byte("{}"))
 
 		Expect(err).To(MatchError(webauthnadapter.ErrChallengeExpired))
-		Expect(res.UserID).To(Equal(uuid.Nil))
+		Expect(res.UserID.String()).To(Equal("00000000-0000-0000-0000-000000000000"))
 	})
 })
