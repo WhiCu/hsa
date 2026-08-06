@@ -14,7 +14,10 @@ import (
 	"github.com/whicu/hsa/internal/domain/user"
 )
 
-var ErrInviteNotFound = errors.New("application: invite not found")
+var (
+	ErrInviteNotFound      = errors.New("application: invite not found")
+	ErrWrappedKeysRequired = errors.New("application: at least one wrapped key is required")
+)
 
 type InviteFinderByID interface {
 	FindByID(ctx context.Context, id invite.InviteID) (*invite.Invite, error)
@@ -105,6 +108,11 @@ type FinishInviteRegistrationOutput struct {
 
 func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInviteRegistrationInput) (*FinishInviteRegistrationOutput, error) {
 	ig.log.DebugContext(ctx, "executing finish invite registration")
+
+	if len(in.WrappedKeys) == 0 {
+		ig.log.WarnContext(ctx, "registration rejected: no wrapped keys provided")
+		return nil, ErrWrappedKeysRequired
+	}
 
 	now := time.Now()
 

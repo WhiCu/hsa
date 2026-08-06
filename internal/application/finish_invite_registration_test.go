@@ -164,59 +164,23 @@ var _ = Describe("FinishInviteRegistration", func() {
 				Expect(out.RefreshToken).To(Equal(expectedRefreshCode))
 			})
 		})
-
-		It("Succeeds with empty WrappedKeys slice", func(ctx SpecContext) {
-			synctest.Test(testT, func(_ *testing.T) {
-				challengeToken := testChallengeToken
-				regResponse := []byte("reg-response")
-				invID := uuid.New()
-				userID := uuid.New()
-
-				regResult := application.RegistrationResult{
-					UserID:           userID,
-					InviteID:         invID,
-					CredentialID:     []byte("ext"),
-					PublicKey:        []byte("pub"),
-					Transports:       []string{"usb"},
-					InitialSignCount: 0,
-				}
-				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
-
-				inv, _ := invite.New(invID, uuid.New(), "hash", 24*time.Hour, time.Now())
-				invites.EXPECT().FindByID(ctx, invID).Return(inv, nil).Once()
-				invites.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-				users.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-
-				ids.EXPECT().NewID().Return(uuid.New()).Once() // Credential ID
-				credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-
-				keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
-					return len(ks) == 0
-				})).Return(nil).Once()
-
-				expectedRefreshCode := "refresh-code"
-				refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
-				ids.EXPECT().NewID().Return(uuid.New()).Once() // Session ID
-				sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-				accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return("access-code", nil).Once()
-
-				in := application.FinishInviteRegistrationInput{
-					ChallengeToken:       challengeToken,
-					RegistrationResponse: regResponse,
-					WrappedKeys:          []application.WrappedKeyInput{},
-				}
-
-				out, err := uc.Execute(ctx, in)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(out).ToNot(BeNil())
-			})
-		})
 	})
 
 	// --- Pre-Transaction & Domain Failures ---
 
 	Describe("Pre-Transaction & Domain Failures", func() {
+		It("Fails with empty WrappedKeys slice", func(ctx SpecContext) {
+			in := application.FinishInviteRegistrationInput{
+				ChallengeToken:       testChallengeToken,
+				RegistrationResponse: []byte("reg-response"),
+				WrappedKeys:          []application.WrappedKeyInput{},
+			}
+
+			out, err := uc.Execute(ctx, in)
+
+			Expect(err).To(MatchError(application.ErrWrappedKeysRequired))
+			Expect(out).To(BeNil())
+		})
 		It("Fails early when WebAuthn registration finish fails (e.g. forged/expired challenge)", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				expectedErr := errors.New("challenge expired or invalid")
