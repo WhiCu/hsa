@@ -53,7 +53,7 @@ var _ = Describe("SessionIssuer", func() {
 
 		userID = uuid.New()
 		deviceInfo = "Mozilla/5.0 (Mobile)"
-		ipAddress = "127.0.0.1"
+		ipAddress = "192.168.1.200"
 		now = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	})
 
