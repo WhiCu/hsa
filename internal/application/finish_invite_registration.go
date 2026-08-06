@@ -98,9 +98,19 @@ type FinishInviteRegistrationInput struct {
 	IPAddress            string
 }
 
+// SECURITY: never log this field
+func (in FinishInviteRegistrationInput) String() string {
+	return fmt.Sprintf("FinishInviteRegistrationInput{ChallengeToken: ***REDACTED***, RegistrationResponse: ***REDACTED***, WrappedKeys: %v, DeviceInfo: %v, IPAddress: %v}", in.WrappedKeys, in.DeviceInfo, in.IPAddress)
+}
+
 type FinishInviteRegistrationOutput struct {
 	AccessToken  string
 	RefreshToken string
+}
+
+// SECURITY: never log this field
+func (out FinishInviteRegistrationOutput) String() string {
+	return "FinishInviteRegistrationOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***}"
 }
 
 func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInviteRegistrationInput) (*FinishInviteRegistrationOutput, error) {

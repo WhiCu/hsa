@@ -1,0 +1,4 @@
+## 2024-08-06 - [Application Flow Structs Token Leakage]
+**Vulnerability:** Found unredacted sensitive tokens (`ChallengeToken`, `AccessToken`, `RefreshToken`) within application layer DTOs like `LoginInput`, `LoginOutput`, `FinishInviteRegistrationInput`, and `FinishInviteRegistrationOutput`.
+**Learning:** Security redaction was well-implemented at the domain and infrastructure levels (like `key.WrappedKey` and `crypto.SecretManager`), but there was a gap at the application layer where raw strings of these tokens were being packaged into struct inputs/outputs. Standard formatters (like `%+v` in `fmt.Printf` or structured loggers) would silently log these sensitive strings.
+**Prevention:** Ensured that `String()` methods are applied not just to domain entities but also to application layer inputs/outputs (DTOs) which carry sensitive fields to guarantee that `***REDACTED***` is output when logged. Added `// SECURITY: never log this field` to these implementations.
