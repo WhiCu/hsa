@@ -13,6 +13,7 @@ const (
 	testRefreshHash    = "refresh-hash"
 	testAccessCode     = "access-code"
 	testTransportUSB   = "usb"
+	testString         = "test"
 )
 
 var testT *testing.T

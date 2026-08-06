@@ -182,20 +182,21 @@ var _ = Describe("FinishInviteRegistration", func() {
 			Expect(out).To(BeNil())
 		})
 		It("Fails early when WebAuthn registration finish fails (e.g. forged/expired challenge)", func(ctx SpecContext) {
-			synctest.Test(testT, func(_ *testing.T) {
-				expectedErr := errors.New("challenge expired or invalid")
-				registrator.EXPECT().Finish(ctx, "forged-token", []byte("resp")).Return(application.RegistrationResult{}, expectedErr).Once()
+			expectedErr := errors.New("challenge expired or invalid")
+			registrator.EXPECT().Finish(ctx, "forged-token", []byte("resp")).Return(application.RegistrationResult{}, expectedErr).Once()
 
-				in := application.FinishInviteRegistrationInput{
-					ChallengeToken:       "forged-token",
-					RegistrationResponse: []byte("resp"),
-				}
+			in := application.FinishInviteRegistrationInput{
+				ChallengeToken:       "forged-token",
+				RegistrationResponse: []byte("resp"),
+				WrappedKeys: []application.WrappedKeyInput{
+					{0, []byte{}, testString},
+				},
+			}
 
-				out, err := uc.Execute(ctx, in)
+			out, err := uc.Execute(ctx, in)
 
-				Expect(err).To(MatchError(expectedErr))
-				Expect(out).To(BeNil())
-			})
+			Expect(err).To(MatchError(expectedErr))
+			Expect(out).To(BeNil())
 		})
 
 		It("Returns ErrInviteNotFound when invite is not found in database", func(ctx SpecContext) {
@@ -215,6 +216,9 @@ var _ = Describe("FinishInviteRegistration", func() {
 				in := application.FinishInviteRegistrationInput{
 					ChallengeToken:       challengeToken,
 					RegistrationResponse: regResponse,
+					WrappedKeys: []application.WrappedKeyInput{
+						{0, []byte{}, testString},
+					},
 				}
 
 				out, err := uc.Execute(ctx, in)
@@ -250,6 +254,9 @@ var _ = Describe("FinishInviteRegistration", func() {
 				in := application.FinishInviteRegistrationInput{
 					ChallengeToken:       challengeToken,
 					RegistrationResponse: regResponse,
+					WrappedKeys: []application.WrappedKeyInput{
+						{0, []byte{}, testString},
+					},
 				}
 
 				out, err := uc.Execute(ctx, in)
