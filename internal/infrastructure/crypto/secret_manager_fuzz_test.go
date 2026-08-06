@@ -2,6 +2,7 @@ package crypto_test
 
 import (
 	"testing"
+
 	"github.com/whicu/hsa/internal/infrastructure/crypto"
 )
 
