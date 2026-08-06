@@ -12,7 +12,7 @@ func TestFinishInviteRegistrationInput_String(t *testing.T) {
 		ChallengeToken:       "secret_challenge",
 		RegistrationResponse: []byte("secret_response"),
 		DeviceInfo:           "Test Device",
-		IPAddress:            "127.0.0.1",
+		IPAddress:            "192.168.1.50",
 	}
 	str := in.String()
 	if strings.Contains(str, "secret_challenge") {
@@ -45,7 +45,7 @@ func TestLoginInput_String(t *testing.T) {
 		ChallengeToken:         "secret_challenge",
 		AuthenticationResponse: []byte("secret_auth"),
 		DeviceInfo:             "Test Device",
-		IPAddress:              "127.0.0.1",
+		IPAddress:              "192.168.1.50",
 	}
 	str := in.String()
 	if strings.Contains(str, "secret_challenge") {
