@@ -7,17 +7,22 @@ import (
 
 type ErrorFormatFunc func([]error) string
 
+// ⚡ Bolt: Using strings.Builder instead of slice allocation + strings.Join to reduce memory allocations and improve performance
 func ListFormatFunc(es []error) string {
 	if len(es) == 1 {
 		return fmt.Sprintf("1 error occurred:\n\t* %s\n\n", es[0])
 	}
 
-	points := make([]string, len(es))
-	for i, err := range es {
-		points[i] = fmt.Sprintf("* %s", err)
+	var b strings.Builder
+	// Pre-allocate assuming ~30 chars per error message on average
+	b.Grow(32 + len(es)*30)
+	fmt.Fprintf(&b, "%d errors occurred:\n", len(es))
+	for _, err := range es {
+		b.WriteString("\t* ")
+		b.WriteString(err.Error())
+		b.WriteString("\n")
 	}
+	b.WriteString("\n")
 
-	return fmt.Sprintf(
-		"%d errors occurred:\n\t%s\n\n",
-		len(es), strings.Join(points, "\n\t"))
+	return b.String()
 }
