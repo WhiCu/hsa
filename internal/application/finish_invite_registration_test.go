@@ -153,7 +153,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg"},
 					},
 					DeviceInfo: "device",
-					IPAddress:  "127.0.0.1",
+					IPAddress:  "192.168.1.100",
 				}
 
 				out, err := uc.Execute(ctx, in)

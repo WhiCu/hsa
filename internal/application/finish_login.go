@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -52,9 +53,19 @@ type LoginInput struct {
 	IPAddress              string
 }
 
+// SECURITY: never log this field
+func (in LoginInput) String() string {
+	return fmt.Sprintf("LoginInput{ChallengeToken: ***REDACTED***, AuthenticationResponse: ***REDACTED***, DeviceInfo: %v, IPAddress: %v}", in.DeviceInfo, in.IPAddress)
+}
+
 type LoginOutput struct {
 	AccessToken  string
 	RefreshToken string
+}
+
+// SECURITY: never log this field
+func (out LoginOutput) String() string {
+	return "LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***}"
 }
 
 func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, error) {
