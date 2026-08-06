@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 )
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
@@ -34,6 +35,9 @@ func (sm *SecretManager) GenerateToken(n int) (token, hash string, err error) {
 }
 
 func generateRandomBase32(n int) (string, error) {
+	if n < 0 || n > 1<<20 {
+		return "", errors.New("crypto: invalid length")
+	}
 	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
