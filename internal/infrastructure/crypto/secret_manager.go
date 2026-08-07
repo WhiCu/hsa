@@ -6,16 +6,26 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"errors"
+	"hash"
+	"sync"
 )
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 type SecretManager struct {
 	secretKey []byte
+	hmacPool  sync.Pool
 }
 
 func NewSecretManager(secretKey []byte) *SecretManager {
-	return &SecretManager{secretKey: secretKey}
+	return &SecretManager{
+		secretKey: secretKey,
+		hmacPool: sync.Pool{
+			New: func() any {
+				return hmac.New(sha256.New, secretKey)
+			},
+		},
+	}
 }
 
 // SECURITY: never log this field
@@ -27,11 +37,11 @@ func (sm *SecretManager) String() string {
 }
 
 func (sm *SecretManager) GenerateHash(raw string) (string, error) {
-	return generateHashBase32(raw, sm.secretKey)
+	return sm.generateHashBase32(raw)
 }
 
 func (sm *SecretManager) GenerateToken(n int) (token, hash string, err error) {
-	return generateToken(n, sm.secretKey)
+	return sm.generateToken(n)
 }
 
 func generateRandomBase32(n int) (string, error) {
@@ -45,8 +55,14 @@ func generateRandomBase32(n int) (string, error) {
 	return b32.EncodeToString(buf), nil
 }
 
-func generateHash(raw string, secretKey []byte) ([]byte, error) {
-	h := hmac.New(sha256.New, secretKey)
+func (sm *SecretManager) generateHash(raw string) ([]byte, error) {
+	h, ok := sm.hmacPool.Get().(hash.Hash)
+	if !ok {
+		return nil, errors.New("crypto: type assertion failed on hash pool")
+	}
+	defer sm.hmacPool.Put(h)
+	h.Reset()
+
 	_, err := h.Write([]byte(raw))
 	if err != nil {
 		return nil, err
@@ -55,20 +71,20 @@ func generateHash(raw string, secretKey []byte) ([]byte, error) {
 	return sum, nil
 }
 
-func generateHashBase32(raw string, secretKey []byte) (string, error) {
-	sum, err := generateHash(raw, secretKey)
+func (sm *SecretManager) generateHashBase32(raw string) (string, error) {
+	sum, err := sm.generateHash(raw)
 	if err != nil {
 		return "", err
 	}
 	return b32.EncodeToString(sum), nil
 }
 
-func generateToken(n int, secretKey []byte) (raw, hash string, err error) {
+func (sm *SecretManager) generateToken(n int) (raw, hash string, err error) {
 	raw, err = generateRandomBase32(n)
 	if err != nil {
 		return "", "", err
 	}
-	hash, err = generateHashBase32(raw, secretKey)
+	hash, err = sm.generateHashBase32(raw)
 	if err != nil {
 		return "", "", err
 	}
