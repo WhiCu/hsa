@@ -8,6 +8,8 @@ import (
 )
 
 func TestFinishInviteRegistrationInput_String(t *testing.T) {
+	t.Parallel()
+
 	in := application.FinishInviteRegistrationInput{
 		ChallengeToken:       "secret_challenge",
 		RegistrationResponse: []byte("secret_response"),
@@ -27,6 +29,8 @@ func TestFinishInviteRegistrationInput_String(t *testing.T) {
 }
 
 func TestFinishInviteRegistrationOutput_String(t *testing.T) {
+	t.Parallel()
+
 	out := application.FinishInviteRegistrationOutput{
 		AccessToken:  "secret_access",
 		RefreshToken: "secret_refresh",
@@ -41,6 +45,8 @@ func TestFinishInviteRegistrationOutput_String(t *testing.T) {
 }
 
 func TestLoginInput_String(t *testing.T) {
+	t.Parallel()
+
 	in := application.LoginInput{
 		ChallengeToken:         "secret_challenge",
 		AuthenticationResponse: []byte("secret_auth"),
@@ -60,6 +66,8 @@ func TestLoginInput_String(t *testing.T) {
 }
 
 func TestLoginOutput_String(t *testing.T) {
+	t.Parallel()
+
 	out := application.LoginOutput{
 		AccessToken:  "secret_access",
 		RefreshToken: "secret_refresh",
