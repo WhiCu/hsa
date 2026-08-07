@@ -56,7 +56,10 @@ func generateRandomBase32(n int) (string, error) {
 }
 
 func (sm *SecretManager) generateHash(raw string) ([]byte, error) {
-	h := sm.hmacPool.Get().(hash.Hash)
+	h, ok := sm.hmacPool.Get().(hash.Hash)
+	if !ok {
+		return nil, errors.New("crypto: type assertion failed on hash pool")
+	}
 	defer sm.hmacPool.Put(h)
 	h.Reset()
 
