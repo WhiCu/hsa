@@ -12,6 +12,11 @@ import (
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
 
+type hmacHolder struct {
+	h   hash.Hash
+	buf [sha256.Size]byte
+}
+
 type SecretManager struct {
 	secretKey []byte
 	hmacPool  sync.Pool
@@ -22,7 +27,9 @@ func NewSecretManager(secretKey []byte) *SecretManager {
 		secretKey: secretKey,
 		hmacPool: sync.Pool{
 			New: func() any {
-				return hmac.New(sha256.New, secretKey)
+				return &hmacHolder{
+					h: hmac.New(sha256.New, secretKey),
+				}
 			},
 		},
 	}
@@ -55,28 +62,22 @@ func generateRandomBase32(n int) (string, error) {
 	return b32.EncodeToString(buf), nil
 }
 
-func (sm *SecretManager) generateHash(raw string) ([]byte, error) {
-	h, ok := sm.hmacPool.Get().(hash.Hash)
-	if !ok {
-		return nil, errors.New("crypto: type assertion failed on hash pool")
-	}
-	defer sm.hmacPool.Put(h)
-	h.Reset()
-
-	_, err := h.Write([]byte(raw))
-	if err != nil {
-		return nil, err
-	}
-	sum := h.Sum(nil)
-	return sum, nil
-}
-
 func (sm *SecretManager) generateHashBase32(raw string) (string, error) {
-	sum, err := sm.generateHash(raw)
+	v := sm.hmacPool.Get()
+	item, ok := v.(*hmacHolder)
+	if !ok {
+		return "", errors.New("crypto: type assertion failed on hash pool")
+	}
+	defer sm.hmacPool.Put(item)
+	item.h.Reset()
+
+	_, err := item.h.Write([]byte(raw))
 	if err != nil {
 		return "", err
 	}
-	return b32.EncodeToString(sum), nil
+	sum := item.h.Sum(item.buf[:0])
+	encoded := b32.EncodeToString(sum)
+	return encoded, nil
 }
 
 func (sm *SecretManager) generateToken(n int) (raw, hash string, err error) {
