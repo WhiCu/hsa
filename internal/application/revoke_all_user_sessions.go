@@ -39,14 +39,10 @@ func NewRevokeAllUserSessions(
 }
 
 func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.UserID) error {
-	userIDStrs := make([]string, len(userIDs))
-	for i, id := range userIDs {
-		userIDStrs[i] = id.String()
-	}
-
+	// ⚡ Bolt: removed unnecessary userIDStrs allocation; slog natively supports UUID slice serialization
 	uc.log.DebugContext(ctx, "executing revoke all user sessions",
 		slog.Int("users_count", len(userIDs)),
-		slog.Any("user_ids", userIDStrs),
+		slog.Any("user_ids", userIDs),
 	)
 
 	now := time.Now()
@@ -56,7 +52,7 @@ func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.Us
 		tokens, err := uc.sessions.FindActiveByUserIDs(ctx, userIDs, now)
 		if err != nil {
 			uc.log.ErrorContext(ctx, "failed to find active sessions for users",
-				slog.Any("user_ids", userIDStrs),
+				slog.Any("user_ids", userIDs),
 				slog.Any("error", err),
 			)
 			return err
@@ -87,7 +83,7 @@ func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.Us
 
 	if err != nil {
 		uc.log.ErrorContext(ctx, "revoke all user sessions transaction failed",
-			slog.Any("user_ids", userIDStrs),
+			slog.Any("user_ids", userIDs),
 			slog.Any("error", err),
 		)
 		return err
@@ -96,7 +92,7 @@ func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.Us
 	uc.log.InfoContext(ctx, "successfully revoked all user sessions",
 		slog.Int("users_count", len(userIDs)),
 		slog.Int("revoked_sessions_count", revokedCount),
-		slog.Any("user_ids", userIDStrs),
+		slog.Any("user_ids", userIDs),
 	)
 
 	return nil
