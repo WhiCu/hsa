@@ -6,6 +6,8 @@ import (
 )
 
 func TestListFormatFunc(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		errs     []error
@@ -30,6 +32,7 @@ func TestListFormatFunc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ListFormatFunc(tt.errs)
 			if result != tt.expected {
 				t.Errorf("expected:\n%q\ngot:\n%q", tt.expected, result)
