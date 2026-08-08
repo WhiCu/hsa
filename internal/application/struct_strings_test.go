@@ -44,6 +44,26 @@ func TestFinishInviteRegistrationOutput_String(t *testing.T) {
 	}
 }
 
+func TestRegistrationResult_String(t *testing.T) {
+	res := application.RegistrationResult{
+		PublicKey: []byte("secret_public_key"),
+	}
+	str := res.String()
+	if strings.Contains(str, "secret_public_key") {
+		t.Errorf("PublicKey was not redacted")
+	}
+}
+
+func TestAuthenticationResult_String(t *testing.T) {
+	res := application.AuthenticationResult{
+		ExternalID: []byte("secret_external_id"),
+	}
+	str := res.String()
+	if strings.Contains(str, "secret_external_id") {
+		t.Errorf("ExternalID was not redacted")
+	}
+}
+
 func TestLoginInput_String(t *testing.T) {
 	t.Parallel()
 
