@@ -14,11 +14,11 @@ var (
 )
 
 type TokenCodec struct {
-	pasetoKey paseto.V4SymmetricKey
+	privateKey paseto.V4SymmetricKey
 }
 
-func NewTokenCodec(pasetoKey paseto.V4SymmetricKey) *TokenCodec {
-	return &TokenCodec{pasetoKey: pasetoKey}
+func NewTokenCodec(privateKey paseto.V4SymmetricKey) *TokenCodec {
+	return &TokenCodec{privateKey: privateKey}
 }
 
 func (sc *TokenCodec) Encode(payload any, ttl time.Duration) (string, error) {
@@ -31,13 +31,13 @@ func (sc *TokenCodec) Encode(payload any, ttl time.Duration) (string, error) {
 	token.SetExpiration(time.Now().Add(ttl))
 	token.SetString("payload", string(raw))
 
-	return token.V4Encrypt(sc.pasetoKey, nil), nil
+	return token.V4Encrypt(sc.privateKey, nil), nil
 }
 
 func (sc *TokenCodec) Decode(tokenStr string, out any) error {
 	parser := paseto.NewParser()
 
-	token, err := parser.ParseV4Local(sc.pasetoKey, tokenStr, nil)
+	token, err := parser.ParseV4Local(sc.privateKey, tokenStr, nil)
 	if err != nil {
 		if err, ok := errors.AsType[paseto.RuleError](err); ok {
 			return errors.Join(ErrTokenExpired, err)

@@ -157,7 +157,7 @@ func (sm *testSecretManager) generateHashBase32(raw string) (string, error) {
 	defer sm.hmacPool.Put(item)
 	item.h.Reset()
 
-	_, err := item.h.Write([]byte(raw))
+	_, err := item.h.Write(stringToBytes(raw))
 	if err != nil {
 		return "", err
 	}

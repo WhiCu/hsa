@@ -8,6 +8,7 @@ import (
 	"errors"
 	"hash"
 	"sync"
+	"unsafe"
 )
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
@@ -71,7 +72,7 @@ func (sm *SecretManager) generateHashBase32(raw string) (string, error) {
 	defer sm.hmacPool.Put(item)
 	item.h.Reset()
 
-	_, err := item.h.Write([]byte(raw))
+	_, err := item.h.Write(stringToBytes(raw))
 	if err != nil {
 		return "", err
 	}
@@ -90,4 +91,11 @@ func (sm *SecretManager) generateToken(n int) (raw, hash string, err error) {
 		return "", "", err
 	}
 	return raw, hash, nil
+}
+
+func stringToBytes(s string) []byte {
+	if len(s) == 0 {
+		return nil
+	}
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
