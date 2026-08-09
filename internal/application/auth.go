@@ -12,7 +12,7 @@ import (
 type RegistrationResult struct {
 	UserID           user.UserID
 	InviteID         invite.InviteID
-	CredentialID     credential.ExternalID
+	ExternalID       credential.ExternalID
 	PublicKey        []byte
 	Transports       []string
 	InitialSignCount uint32
@@ -20,7 +20,7 @@ type RegistrationResult struct {
 
 // SECURITY: never log this field
 func (r RegistrationResult) String() string {
-	return fmt.Sprintf("RegistrationResult{UserID: %v, InviteID: %v, CredentialID: %v, PublicKey: ***REDACTED***, Transports: %v, InitialSignCount: %d}", r.UserID, r.InviteID, r.CredentialID, r.Transports, r.InitialSignCount)
+	return fmt.Sprintf("RegistrationResult{UserID: %v, InviteID: %v, CredentialID: %v, PublicKey: ***REDACTED***, Transports: %v, InitialSignCount: %d}", r.UserID, r.InviteID, r.ExternalID, r.Transports, r.InitialSignCount)
 }
 
 type Registrator interface {

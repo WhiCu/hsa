@@ -102,7 +102,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 				regResult := application.RegistrationResult{
 					UserID:           userID,
 					InviteID:         invID,
-					CredentialID:     credExternalID,
+					ExternalID:       credExternalID,
 					PublicKey:        pubKey,
 					Transports:       transports,
 					InitialSignCount: initialSignCount,
@@ -274,11 +274,11 @@ var _ = Describe("FinishInviteRegistration", func() {
 				userID := uuid.New()
 
 				regResult := application.RegistrationResult{
-					UserID:       userID,
-					InviteID:     invID,
-					CredentialID: []byte("ext"),
-					PublicKey:    []byte("pub"),
-					Transports:   []string{"usb"},
+					UserID:     userID,
+					InviteID:   invID,
+					ExternalID: []byte("ext"),
+					PublicKey:  []byte("pub"),
+					Transports: []string{"usb"},
 				}
 				registrator.EXPECT().Finish(ctx, challengeToken, regResponse).Return(regResult, nil).Once()
 

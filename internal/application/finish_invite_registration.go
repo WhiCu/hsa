@@ -216,7 +216,7 @@ func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context,
 	}
 
 	newCredID := ig.ids.NewID()
-	cred, err := credential.New(newCredID, res.CredentialID, u.ID(), res.PublicKey, res.Transports, now)
+	cred, err := credential.New(newCredID, res.ExternalID, u.ID(), res.PublicKey, res.Transports, now)
 	if err != nil {
 		ig.log.ErrorContext(ctx, "failed to create credential domain entity", slog.String("user_id", u.ID().String()), slog.Any("error", err))
 		return nil, nil, err
