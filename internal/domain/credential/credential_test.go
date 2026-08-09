@@ -62,6 +62,24 @@ var _ = Describe("Credential", func() {
 		Entry("Nil Public Key", uuid.New(), []byte("external-id"), uuid.New(), nil, credential.ErrPublicKeyRequired),
 	)
 
+	Context("String Method", func() {
+		It("should redact sensitive fields in String()", func() {
+			c, err := credential.New(uuid.New(), []byte("secret-ext-id"), uuid.New(), []byte("secret-pub-key"), []string{"usb"}, time.Now())
+			Expect(err).NotTo(HaveOccurred())
+
+			str := c.String()
+
+			Expect(str).To(ContainSubstring("***REDACTED***"))
+			Expect(str).NotTo(ContainSubstring("secret-ext-id"))
+			Expect(str).NotTo(ContainSubstring("secret-pub-key"))
+		})
+
+		It("should handle nil receiver gracefully", func() {
+			var nilCred *credential.Credential
+			Expect(nilCred.String()).To(Equal("<nil>"))
+		})
+	})
+
 	Context("State mutations", func() {
 		It("should properly set and update sign count, and detect regression", func() {
 			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now())
