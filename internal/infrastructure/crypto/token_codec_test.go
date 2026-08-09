@@ -20,16 +20,16 @@ const (
 	testPayloadData = "user-session-payload"
 )
 
-var _ = Describe("SecretCodec", func() {
+var _ = Describe("TokenCodec", func() {
 	var (
-		codec        *crypto.SecretCodec
+		codec        *crypto.TokenCodec
 		pasetoKey    paseto.V4SymmetricKey
 		validPayload testPayload
 	)
 
 	BeforeEach(func() {
 		pasetoKey = paseto.NewV4SymmetricKey()
-		codec = crypto.NewSecretCodec(pasetoKey)
+		codec = crypto.NewTokenCodec(pasetoKey)
 		validPayload = testPayload{
 			ID:   testPayloadID,
 			Data: testPayloadData,
@@ -84,7 +84,7 @@ var _ = Describe("SecretCodec", func() {
 		})
 
 		It("should return ErrTokenMalformed if token was encrypted with a different key", func() {
-			otherCodec := crypto.NewSecretCodec(paseto.NewV4SymmetricKey())
+			otherCodec := crypto.NewTokenCodec(paseto.NewV4SymmetricKey())
 			tokenStr, err := otherCodec.Encode(validPayload, time.Minute)
 			Expect(err).NotTo(HaveOccurred())
 

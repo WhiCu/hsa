@@ -13,15 +13,15 @@ var (
 	ErrTokenExpired   = errors.New("crypto: challenge token expired")
 )
 
-type SecretCodec struct {
+type TokenCodec struct {
 	pasetoKey paseto.V4SymmetricKey
 }
 
-func NewSecretCodec(pasetoKey paseto.V4SymmetricKey) *SecretCodec {
-	return &SecretCodec{pasetoKey: pasetoKey}
+func NewTokenCodec(pasetoKey paseto.V4SymmetricKey) *TokenCodec {
+	return &TokenCodec{pasetoKey: pasetoKey}
 }
 
-func (sc *SecretCodec) Encode(payload any, ttl time.Duration) (string, error) {
+func (sc *TokenCodec) Encode(payload any, ttl time.Duration) (string, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -34,7 +34,7 @@ func (sc *SecretCodec) Encode(payload any, ttl time.Duration) (string, error) {
 	return token.V4Encrypt(sc.pasetoKey, nil), nil
 }
 
-func (sc *SecretCodec) Decode(tokenStr string, out any) error {
+func (sc *TokenCodec) Decode(tokenStr string, out any) error {
 	parser := paseto.NewParser()
 
 	token, err := parser.ParseV4Local(sc.pasetoKey, tokenStr, nil)
