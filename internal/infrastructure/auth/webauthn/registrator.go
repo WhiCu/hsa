@@ -157,7 +157,7 @@ func (r *Registrator) Finish(ctx context.Context, challengeToken string, respons
 	return application.RegistrationResult{
 		UserID:           payload.UserID,
 		InviteID:         payload.InviteID,
-		CredentialID:     cred.ID,
+		ExternalID:       cred.ID,
 		PublicKey:        cred.PublicKey,
 		Transports:       transports,
 		InitialSignCount: cred.Authenticator.SignCount,

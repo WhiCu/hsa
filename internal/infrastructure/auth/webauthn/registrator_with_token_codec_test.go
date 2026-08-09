@@ -13,20 +13,20 @@ import (
 	"github.com/whicu/hsa/pkg/logger"
 )
 
-var _ = Describe("RegistratorWithSecretCodec", func() {
+var _ = Describe("RegistratorWithTokenCodec", func() {
 	var (
-		wa          *gowebauthn.WebAuthn
-		secretCodec *crypto.SecretCodec
-		reg         *webauthnadapter.Registrator
-		ttl         time.Duration
+		wa         *gowebauthn.WebAuthn
+		tokenCodec *crypto.TokenCodec
+		reg        *webauthnadapter.Registrator
+		ttl        time.Duration
 	)
 
 	BeforeEach(func() {
 		wa = newTestWebAuthn(GinkgoT())
 		pasetoKey := paseto.NewV4SymmetricKey()
-		secretCodec = crypto.NewSecretCodec(pasetoKey)
+		tokenCodec = crypto.NewTokenCodec(pasetoKey)
 		ttl = 5 * time.Minute
-		reg = webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, secretCodec, ttl)
+		reg = webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, tokenCodec, ttl)
 	})
 
 	It("should successfully execute full Begin flow and generate a valid decryptable PASETO token", func(ctx SpecContext) {
@@ -40,7 +40,7 @@ var _ = Describe("RegistratorWithSecretCodec", func() {
 		Expect(optsJSON).NotTo(BeNil())
 
 		var decoded map[string]any
-		err = secretCodec.Decode(tokenStr, &decoded)
+		err = tokenCodec.Decode(tokenStr, &decoded)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(decoded).To(HaveKey("session_data"))
 		Expect(decoded).To(HaveKey("invite_id"))
@@ -48,7 +48,7 @@ var _ = Describe("RegistratorWithSecretCodec", func() {
 	})
 
 	It("should reject Finish operation when PASETO token is expired", func(ctx SpecContext) {
-		expiredReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, secretCodec, -time.Minute)
+		expiredReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, tokenCodec, -time.Minute)
 
 		userID := uuid.New()
 		inviteID := uuid.New()
@@ -62,7 +62,7 @@ var _ = Describe("RegistratorWithSecretCodec", func() {
 		Expect(res.UserID).To(Equal(uuid.Nil))
 	})
 	It("should reject Finish operation when token is tampered or signed with a different key", func(ctx SpecContext) {
-		otherCodec := crypto.NewSecretCodec(paseto.NewV4SymmetricKey())
+		otherCodec := crypto.NewTokenCodec(paseto.NewV4SymmetricKey())
 		otherReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, otherCodec, ttl)
 
 		userID := uuid.New()
