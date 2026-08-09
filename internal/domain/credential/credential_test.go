@@ -13,6 +13,8 @@ import (
 	"github.com/whicu/hsa/internal/domain/user"
 )
 
+const transportUSB = "usb"
+
 func genValidUUID() *rapid.Generator[uuid.UUID] {
 	return rapid.Custom(func(t *rapid.T) uuid.UUID {
 		var id uuid.UUID
@@ -32,7 +34,7 @@ var _ = Describe("Credential", func() {
 	DescribeTable("Creation and validation checks",
 		func(id credential.CredentialID, externalID credential.ExternalID, userID user.UserID, pubKey []byte, expectedErr error) {
 			now := time.Now()
-			transports := []string{"usb", "nfc"}
+			transports := []string{transportUSB, "nfc"}
 
 			c, err := credential.New(id, externalID, userID, pubKey, transports, now)
 
@@ -64,7 +66,7 @@ var _ = Describe("Credential", func() {
 
 	Context("String Method", func() {
 		It("should redact sensitive fields in String()", func() {
-			c, err := credential.New(uuid.New(), []byte("secret-ext-id"), uuid.New(), []byte("secret-pub-key"), []string{"usb"}, time.Now())
+			c, err := credential.New(uuid.New(), []byte("secret-ext-id"), uuid.New(), []byte("secret-pub-key"), []string{transportUSB}, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 
 			str := c.String()
@@ -82,7 +84,7 @@ var _ = Describe("Credential", func() {
 
 	Context("State mutations", func() {
 		It("should properly set and update sign count, and detect regression", func() {
-			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now())
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{transportUSB}, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(0)))
 
