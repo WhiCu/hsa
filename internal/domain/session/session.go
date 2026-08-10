@@ -51,9 +51,13 @@ func New(
 		return nil, ErrTokenHashRequired
 	}
 	return &RefreshToken{
-		id: id, userID: userID, tokenHash: tokenHash,
-		deviceInfo: deviceInfo, ipAddress: ipAddress,
-		expiresAt: now.Add(ttl), createdAt: now,
+		id:         id,
+		userID:     userID,
+		tokenHash:  tokenHash,
+		deviceInfo: deviceInfo,
+		ipAddress:  ipAddress,
+		expiresAt:  now.Add(ttl),
+		createdAt:  now,
 	}, nil
 }
 
@@ -73,6 +77,26 @@ func (t *RefreshToken) Revoke(now time.Time) error {
 	}
 	t.revokedAt = &now
 	return nil
+}
+
+func (t *RefreshToken) Rotate(id RefreshTokenID, tokenHash string, now time.Time) (rotated *RefreshToken, err error) {
+	defer func() {
+		if err != nil {
+			err = domain.ErrInvalidArgument(err)
+		}
+	}()
+	if id == uuid.Nil {
+		return nil, ErrIDRequired
+	}
+	if tokenHash == "" {
+		return nil, ErrTokenHashRequired
+	}
+	return &RefreshToken{
+		id: id, userID: t.userID, tokenHash: tokenHash,
+		deviceInfo: t.deviceInfo, ipAddress: t.ipAddress,
+		expiresAt: t.expiresAt,
+		createdAt: now,
+	}, nil
 }
 
 // SECURITY: never log this field
