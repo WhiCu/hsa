@@ -2,6 +2,7 @@ package credential
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,4 +79,12 @@ func (c *Credential) SetSignCount(n uint32) error {
 	}
 	c.signCount = n
 	return nil
+}
+
+// SECURITY: never log this field
+func (c *Credential) String() string {
+	if c == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("Credential{id: %v, externalID: %x, userID: %v, publicKey: ***REDACTED***, signCount: %d, transports: %v, createdAt: %v}", c.id, c.externalID, c.userID, c.signCount, c.transports, c.createdAt)
 }
