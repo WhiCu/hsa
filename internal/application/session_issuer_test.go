@@ -78,8 +78,11 @@ var _ = Describe("SessionIssuer", func() {
 		expectRefreshGenOK(expectedRefreshCode, expectedRefreshHash)
 		ids.EXPECT().NewID().Return(sessionID).Once()
 
-		sessions.EXPECT().Save(ctx, mock.MatchedBy(func(s *session.RefreshToken) bool {
-			return s.ID() == sessionID && s.IsValid(now)
+		sessions.EXPECT().Save(ctx, mock.MatchedBy(func(s []*session.RefreshToken) bool {
+			if len(s) != 1 {
+				return false
+			}
+			return s[0].ID() == sessionID && s[0].IsValid(now)
 		})).Return(nil).Once()
 
 		expectAccessIssueOK(expectedAccessCode)
@@ -146,6 +149,129 @@ var _ = Describe("SessionIssuer", func() {
 			Expect(err).To(MatchError(expectedErr))
 			Expect(access).To(BeEmpty())
 			Expect(refresh).To(BeEmpty())
+		})
+	})
+	Context("Rotate", func() {
+		var (
+			oldRT        *session.RefreshToken
+			oldSessionID uuid.UUID
+		)
+
+		BeforeEach(func() {
+			oldSessionID = uuid.New()
+			var err error
+			// Создаем валидный старый токен для тестов ротации
+			// Время создания делаем в прошлом (на 1 час назад от now)
+			oldRT, err = session.New(
+				oldSessionID,
+				userID,
+				"old-hash",
+				deviceInfo,
+				ipAddress,
+				refreshTTL,
+				now.Add(-time.Hour),
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Rotates access and refresh tokens successfully", func(ctx SpecContext) {
+			newSessionID := uuid.New()
+			expectedRefreshCode := "new-refresh-code"
+			expectedRefreshHash := "new-refresh-hash"
+			expectedAccessCode := "new-access-code"
+
+			// 1. Успешная генерация токена
+			refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, expectedRefreshHash, nil).Once()
+
+			// 2. Успешная генерация нового ID
+			ids.EXPECT().NewID().Return(newSessionID).Once()
+
+			// 3. Выпуск Access-токена
+			accessTokens.EXPECT().IssueAccessToken(userID, accessTTL).Return(expectedAccessCode, nil).Once()
+
+			// 4. Сохранение ОБОИХ токенов (старого отозванного и нового активного)
+			sessions.EXPECT().Save(ctx, mock.MatchedBy(func(s []*session.RefreshToken) bool {
+				if len(s) != 2 {
+					return false
+				}
+
+				oldTokenValid := s[0].ID() == oldSessionID && s[0].IsRevoked()
+				newTokenValid := s[1].ID() == newSessionID && !s[1].IsRevoked() && s[1].UserID() == userID
+
+				return oldTokenValid && newTokenValid
+			})).Return(nil).Once()
+
+			access, refresh, err := si.Rotate(ctx, oldRT, now)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(access).To(Equal(expectedAccessCode))
+			Expect(refresh).To(Equal(expectedRefreshCode))
+		})
+
+		Context("Failure Scenarios", func() {
+			It("Returns error when refresh token generation fails", func(ctx SpecContext) {
+				expectedErr := errors.New("refresh token gen failed")
+
+				// Падаем на первом же шаге
+				refreshTokens.EXPECT().GenerateToken(32).Return("", "", expectedErr).Once()
+
+				access, refresh, err := si.Rotate(ctx, oldRT, now)
+
+				Expect(err).To(MatchError(expectedErr))
+				Expect(access).To(BeEmpty())
+				Expect(refresh).To(BeEmpty())
+			})
+
+			It("Returns error when domain rotation fails (e.g. empty token hash)", func(ctx SpecContext) {
+				// Возвращаем пустой хэш, чтобы доменная сущность вернула ошибку при создании
+				refreshTokens.EXPECT().GenerateToken(32).Return("new-code", "", nil).Once()
+				ids.EXPECT().NewID().Return(uuid.New()).Once()
+
+				access, refresh, err := si.Rotate(ctx, oldRT, now)
+
+				Expect(err).To(MatchError(session.ErrTokenHashRequired))
+				Expect(access).To(BeEmpty())
+				Expect(refresh).To(BeEmpty())
+			})
+
+			It("Returns error when access token issue fails", func(ctx SpecContext) {
+				expectedErr := errors.New("access token issue failed")
+				newSessionID := uuid.New()
+
+				// Проходим генерацию
+				refreshTokens.EXPECT().GenerateToken(32).Return("new-code", "new-hash", nil).Once()
+				ids.EXPECT().NewID().Return(newSessionID).Once()
+
+				// Падаем на выпуске access-токена
+				accessTokens.EXPECT().IssueAccessToken(userID, accessTTL).Return("", expectedErr).Once()
+
+				access, refresh, err := si.Rotate(ctx, oldRT, now)
+
+				Expect(err).To(MatchError(expectedErr))
+				Expect(access).To(BeEmpty())
+				Expect(refresh).To(BeEmpty())
+			})
+
+			It("Returns error when saving rotated tokens fails", func(ctx SpecContext) {
+				expectedErr := errors.New("save rotated tokens failed")
+				newSessionID := uuid.New()
+
+				// Проходим генерацию
+				refreshTokens.EXPECT().GenerateToken(32).Return("new-code", "new-hash", nil).Once()
+				ids.EXPECT().NewID().Return(newSessionID).Once()
+
+				// Проходим выпуск access-токена
+				accessTokens.EXPECT().IssueAccessToken(userID, accessTTL).Return("new-access", nil).Once()
+
+				// Падаем на сохранении базы
+				sessions.EXPECT().Save(ctx, mock.Anything).Return(expectedErr).Once()
+
+				access, refresh, err := si.Rotate(ctx, oldRT, now)
+
+				Expect(err).To(MatchError(expectedErr))
+				Expect(access).To(BeEmpty())
+				Expect(refresh).To(BeEmpty())
+			})
 		})
 	})
 })

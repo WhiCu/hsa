@@ -39,16 +39,22 @@ func (_m *RefreshTokenSaver) EXPECT() *RefreshTokenSaver_Expecter {
 }
 
 // Save provides a mock function for the type RefreshTokenSaver
-func (_mock *RefreshTokenSaver) Save(ctx context.Context, t *session.RefreshToken) error {
-	ret := _mock.Called(ctx, t)
+func (_mock *RefreshTokenSaver) Save(ctx context.Context, t ...*session.RefreshToken) error {
+	var tmpRet mock.Arguments
+	if len(t) > 0 {
+		tmpRet = _mock.Called(ctx, t)
+	} else {
+		tmpRet = _mock.Called(ctx)
+	}
+	ret := tmpRet
 
 	if len(ret) == 0 {
 		panic("no return value specified for Save")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *session.RefreshToken) error); ok {
-		r0 = returnFunc(ctx, t)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, ...*session.RefreshToken) error); ok {
+		r0 = returnFunc(ctx, t...)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -62,24 +68,27 @@ type RefreshTokenSaver_Save_Call struct {
 
 // Save is a helper method to define mock.On call
 //   - ctx context.Context
-//   - t *session.RefreshToken
-func (_e *RefreshTokenSaver_Expecter) Save(ctx any, t any) *RefreshTokenSaver_Save_Call {
-	return &RefreshTokenSaver_Save_Call{Call: _e.mock.On("Save", ctx, t)}
+//   - t ...*session.RefreshToken
+func (_e *RefreshTokenSaver_Expecter) Save(ctx any, t ...any) *RefreshTokenSaver_Save_Call {
+	return &RefreshTokenSaver_Save_Call{Call: _e.mock.On("Save",
+		append([]any{ctx}, t...)...)}
 }
 
-func (_c *RefreshTokenSaver_Save_Call) Run(run func(ctx context.Context, t *session.RefreshToken)) *RefreshTokenSaver_Save_Call {
+func (_c *RefreshTokenSaver_Save_Call) Run(run func(ctx context.Context, t ...*session.RefreshToken)) *RefreshTokenSaver_Save_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *session.RefreshToken
-		if args[1] != nil {
-			arg1 = args[1].(*session.RefreshToken)
+		var arg1 []*session.RefreshToken
+		var variadicArgs []*session.RefreshToken
+		if len(args) > 1 {
+			variadicArgs = args[1].([]*session.RefreshToken)
 		}
+		arg1 = variadicArgs
 		run(
 			arg0,
-			arg1,
+			arg1...,
 		)
 	})
 	return _c
@@ -90,7 +99,7 @@ func (_c *RefreshTokenSaver_Save_Call) Return(err error) *RefreshTokenSaver_Save
 	return _c
 }
 
-func (_c *RefreshTokenSaver_Save_Call) RunAndReturn(run func(ctx context.Context, t *session.RefreshToken) error) *RefreshTokenSaver_Save_Call {
+func (_c *RefreshTokenSaver_Save_Call) RunAndReturn(run func(ctx context.Context, t ...*session.RefreshToken) error) *RefreshTokenSaver_Save_Call {
 	_c.Call.Return(run)
 	return _c
 }

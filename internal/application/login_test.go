@@ -30,6 +30,9 @@ var _ = Describe("Login", func() {
 		ids             *mocks.IDGenerator
 		transactor      *mocks.Transactor
 
+		revokeSessions *mocks.ActiveSessionsFinder
+		revokeUser     *application.RevokeAllUserSessions
+
 		beginUC  *application.BeginLogin
 		finishUC *application.Login
 
@@ -49,6 +52,9 @@ var _ = Describe("Login", func() {
 		accessTokens = mocks.NewTokenIssuer(GinkgoT())
 		ids = mocks.NewIDGenerator(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
+		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
+
+		revokeUser = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), revokeSessions, sessions, transactor)
 
 		fixedNow = time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
 
@@ -68,7 +74,7 @@ var _ = Describe("Login", func() {
 		)
 
 		beginUC = application.NewBeginLogin(logger.NewNOPSlog(), authenticator)
-		finishUC = application.NewLogin(logger.NewNOPSlog(), credentials, credentialSaver, authenticator, si, transactor)
+		finishUC = application.NewLogin(logger.NewNOPSlog(), credentials, credentialSaver, authenticator, si, revokeUser, transactor)
 
 		// Мок транзакции: прозрачно исполняет переданную функцию
 		transactor.EXPECT().

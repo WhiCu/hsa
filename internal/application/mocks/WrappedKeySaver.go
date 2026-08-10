@@ -38,59 +38,68 @@ func (_m *WrappedKeySaver) EXPECT() *WrappedKeySaver_Expecter {
 	return &WrappedKeySaver_Expecter{mock: &_m.Mock}
 }
 
-// SaveAll provides a mock function for the type WrappedKeySaver
-func (_mock *WrappedKeySaver) SaveAll(ctx context.Context, keys []*key.WrappedKey) error {
-	ret := _mock.Called(ctx, keys)
+// Save provides a mock function for the type WrappedKeySaver
+func (_mock *WrappedKeySaver) Save(ctx context.Context, keys ...*key.WrappedKey) error {
+	var tmpRet mock.Arguments
+	if len(keys) > 0 {
+		tmpRet = _mock.Called(ctx, keys)
+	} else {
+		tmpRet = _mock.Called(ctx)
+	}
+	ret := tmpRet
 
 	if len(ret) == 0 {
-		panic("no return value specified for SaveAll")
+		panic("no return value specified for Save")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []*key.WrappedKey) error); ok {
-		r0 = returnFunc(ctx, keys)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, ...*key.WrappedKey) error); ok {
+		r0 = returnFunc(ctx, keys...)
 	} else {
 		r0 = ret.Error(0)
 	}
 	return r0
 }
 
-// WrappedKeySaver_SaveAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveAll'
-type WrappedKeySaver_SaveAll_Call struct {
+// WrappedKeySaver_Save_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Save'
+type WrappedKeySaver_Save_Call struct {
 	*mock.Call
 }
 
-// SaveAll is a helper method to define mock.On call
+// Save is a helper method to define mock.On call
 //   - ctx context.Context
-//   - keys []*key.WrappedKey
-func (_e *WrappedKeySaver_Expecter) SaveAll(ctx any, keys any) *WrappedKeySaver_SaveAll_Call {
-	return &WrappedKeySaver_SaveAll_Call{Call: _e.mock.On("SaveAll", ctx, keys)}
+//   - keys ...*key.WrappedKey
+func (_e *WrappedKeySaver_Expecter) Save(ctx any, keys ...any) *WrappedKeySaver_Save_Call {
+	return &WrappedKeySaver_Save_Call{Call: _e.mock.On("Save",
+		append([]any{ctx}, keys...)...)}
 }
 
-func (_c *WrappedKeySaver_SaveAll_Call) Run(run func(ctx context.Context, keys []*key.WrappedKey)) *WrappedKeySaver_SaveAll_Call {
+func (_c *WrappedKeySaver_Save_Call) Run(run func(ctx context.Context, keys ...*key.WrappedKey)) *WrappedKeySaver_Save_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
 		var arg1 []*key.WrappedKey
-		if args[1] != nil {
-			arg1 = args[1].([]*key.WrappedKey)
+		var variadicArgs []*key.WrappedKey
+		if len(args) > 1 {
+			variadicArgs = args[1].([]*key.WrappedKey)
 		}
+		arg1 = variadicArgs
 		run(
 			arg0,
-			arg1,
+			arg1...,
 		)
 	})
 	return _c
 }
 
-func (_c *WrappedKeySaver_SaveAll_Call) Return(err error) *WrappedKeySaver_SaveAll_Call {
+func (_c *WrappedKeySaver_Save_Call) Return(err error) *WrappedKeySaver_Save_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *WrappedKeySaver_SaveAll_Call) RunAndReturn(run func(ctx context.Context, keys []*key.WrappedKey) error) *WrappedKeySaver_SaveAll_Call {
+func (_c *WrappedKeySaver_Save_Call) RunAndReturn(run func(ctx context.Context, keys ...*key.WrappedKey) error) *WrappedKeySaver_Save_Call {
 	_c.Call.Return(run)
 	return _c
 }

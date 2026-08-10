@@ -20,7 +20,7 @@ import (
 var _ = Describe("RevokeAllUserSessions", func() {
 	var (
 		sessions   *mocks.ActiveSessionsFinder
-		saver      *mocks.RefreshTokenBatchSaver
+		saver      *mocks.RefreshTokenSaver
 		transactor *mocks.Transactor
 		useCase    *application.RevokeAllUserSessions
 
@@ -30,7 +30,7 @@ var _ = Describe("RevokeAllUserSessions", func() {
 
 	BeforeEach(func() {
 		sessions = mocks.NewActiveSessionsFinder(GinkgoT())
-		saver = mocks.NewRefreshTokenBatchSaver(GinkgoT())
+		saver = mocks.NewRefreshTokenSaver(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
 
 		useCase = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), sessions, saver, transactor)
@@ -71,7 +71,7 @@ var _ = Describe("RevokeAllUserSessions", func() {
 				Once()
 
 			saver.EXPECT().
-				SaveAll(ctx, mock.MatchedBy(func(tokens []*session.RefreshToken) bool {
+				Save(ctx, mock.MatchedBy(func(tokens []*session.RefreshToken) bool {
 					return len(tokens) == 1 && tokens[0].UserID() == user1ID
 				})).
 				Return(nil).
@@ -92,11 +92,6 @@ var _ = Describe("RevokeAllUserSessions", func() {
 				Return([]*session.RefreshToken{}, nil).
 				Once()
 
-			saver.EXPECT().
-				SaveAll(ctx, []*session.RefreshToken{}).
-				Return(nil).
-				Once()
-
 			err := useCase.Execute(ctx, userIDs...)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -113,8 +108,8 @@ var _ = Describe("RevokeAllUserSessions", func() {
 				Return(nil, findErr).
 				Once()
 
-			// saver.SaveAll намеренно без EXPECT() — если реализация вдруг
-			// начнёт звать SaveAll даже после ошибки поиска, мок сам
+			// saver.Save намеренно без EXPECT() — если реализация вдруг
+			// начнёт звать Save даже после ошибки поиска, мок сам
 			// упадёт с "unexpected call", и это будет честной регрессией
 
 			err := useCase.Execute(ctx, userIDs...)
@@ -135,7 +130,7 @@ var _ = Describe("RevokeAllUserSessions", func() {
 				Once()
 
 			saver.EXPECT().
-				SaveAll(ctx, mock.Anything).
+				Save(ctx, mock.Anything).
 				Return(saveErr).
 				Once()
 

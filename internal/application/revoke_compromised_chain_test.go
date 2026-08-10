@@ -24,7 +24,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 		// поэтому его нельзя замокать напрямую: собираем настоящий
 		// юзкейс поверх его собственных моков, как и в RefreshAccessToken
 		revokeSessions   *mocks.ActiveSessionsFinder
-		revokeSaver      *mocks.RefreshTokenBatchSaver
+		revokeSaver      *mocks.RefreshTokenSaver
 		revokeTransactor *mocks.Transactor
 		revokeUser       *application.RevokeAllUserSessions
 
@@ -39,7 +39,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 		descendantsFinder = mocks.NewUserDescendantsFinder(GinkgoT())
 
 		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
-		revokeSaver = mocks.NewRefreshTokenBatchSaver(GinkgoT())
+		revokeSaver = mocks.NewRefreshTokenSaver(GinkgoT())
 		revokeTransactor = mocks.NewTransactor(GinkgoT())
 		revokeUser = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), revokeSessions, revokeSaver, revokeTransactor)
 
@@ -79,11 +79,6 @@ var _ = Describe("RevokeCompromisedChain", func() {
 				Return([]*session.RefreshToken{}, nil).
 				Once()
 
-			revokeSaver.EXPECT().
-				SaveAll(ctx, []*session.RefreshToken{}).
-				Return(nil).
-				Once()
-
 			err := useCase.Execute(ctx, compromisedUserID)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -102,11 +97,6 @@ var _ = Describe("RevokeCompromisedChain", func() {
 			revokeSessions.EXPECT().
 				FindActiveByUserIDs(ctx, expectedUserIDs, mock.AnythingOfType("time.Time")).
 				Return([]*session.RefreshToken{}, nil).
-				Once()
-
-			revokeSaver.EXPECT().
-				SaveAll(ctx, []*session.RefreshToken{}).
-				Return(nil).
 				Once()
 
 			err := useCase.Execute(ctx, compromisedUserID)

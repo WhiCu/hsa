@@ -13,7 +13,11 @@ import (
 	"github.com/whicu/hsa/internal/domain/user"
 )
 
-var ErrCredentialNotFound = errors.New("application: credential not found")
+var (
+	ErrCredentialNotFound       = errors.New("application: credential not found")
+	ErrCredentialRevoked        = errors.New("application: credential revoked")
+	ErrCredentialCloneSuspected = errors.New("application: credential clone suspected")
+)
 
 type CredentialFinder interface {
 	FindByExternalID(ctx context.Context, externalID []byte) (*credential.Credential, error)
@@ -25,6 +29,7 @@ type Login struct {
 	credentialSaver CredentialSaver
 	authenticator   Authenticator
 	sessionIssuer   *SessionIssuer
+	revokeUser      *RevokeAllUserSessions
 	transactor      Transactor
 }
 
@@ -34,6 +39,7 @@ func NewLogin(
 	credentialSaver CredentialSaver,
 	authenticator Authenticator,
 	sessionIssuer *SessionIssuer,
+	revokeUser *RevokeAllUserSessions,
 	transactor Transactor,
 ) *Login {
 	return &Login{
@@ -42,6 +48,7 @@ func NewLogin(
 		credentialSaver: credentialSaver,
 		authenticator:   authenticator,
 		sessionIssuer:   sessionIssuer,
+		revokeUser:      revokeUser,
 		transactor:      transactor,
 	}
 }
@@ -70,61 +77,70 @@ func (out LoginOutput) String() string {
 
 func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, error) {
 	uc.log.DebugContext(ctx, "executing login")
-
 	now := time.Now()
 
 	result, err := uc.authenticator.Finish(ctx, in.ChallengeToken, in.AuthenticationResponse)
 	if err != nil {
-		uc.log.ErrorContext(ctx, "failed to finish webauthn login authentication",
-			slog.Any("error", err),
-		)
+		uc.log.ErrorContext(ctx, "failed to finish webauthn login authentication", slog.Any("error", err))
 		return nil, err
 	}
 
 	var (
-		out    LoginOutput
-		userID user.UserID
+		out      LoginOutput
+		userID   user.UserID
+		extIDStr = hex.EncodeToString(result.ExternalID)
 	)
 
 	err = uc.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
 		cred, txErr := uc.credentials.FindByExternalID(ctx, result.ExternalID)
 		if txErr != nil {
 			if errors.Is(txErr, domain.ErrNotFound) {
-				uc.log.WarnContext(ctx, "credential not found during login",
-					slog.String("external_id", hex.EncodeToString(result.ExternalID)),
-				)
+				uc.log.WarnContext(ctx, "credential not found during login", slog.String("external_id", extIDStr))
 				return ErrCredentialNotFound
 			}
-			uc.log.ErrorContext(ctx, "failed to find credential by external id",
-				slog.String("external_id", hex.EncodeToString(result.ExternalID)),
-				slog.Any("error", txErr),
-			)
+			uc.log.ErrorContext(ctx, "failed to find credential by external id", slog.String("external_id", extIDStr), slog.Any("error", txErr))
 			return txErr
 		}
 
-		if singErr := cred.SetSignCount(result.NewSignCount); singErr != nil {
-			uc.log.ErrorContext(ctx, "failed to update credential sign count",
-				slog.String("credential_id", cred.ID().String()),
-				slog.String("user_id", cred.UserID().String()),
-				slog.Any("error", singErr),
-			)
-			return singErr
+		if cred.IsRevoked() {
+			return ErrCredentialRevoked
 		}
+
+		signErr := cred.SetSignCount(result.NewSignCount)
+		if result.CloneWarning || errors.Is(signErr, credential.ErrSignCountRegression) {
+			uc.log.WarnContext(ctx, "cloned credential detected, revoking key and sessions",
+				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Bool("security", true))
+
+			if credErr := cred.Revoke(now); credErr != nil {
+				return credErr
+			}
+			if credSaveErr := uc.credentialSaver.Save(ctx, cred); credSaveErr != nil {
+				return credSaveErr
+			}
+			if revokeErr := uc.revokeUser.Execute(ctx, cred.UserID()); revokeErr != nil {
+				uc.log.ErrorContext(ctx, "failed to revoke compromised user chain during login",
+					slog.String("user_id", cred.UserID().String()), slog.Any("error", revokeErr))
+				return revokeErr // Fixed: previously returned outer 'err' which was nil
+			}
+			return ErrCredentialCloneSuspected
+		}
+
+		if signErr != nil {
+			uc.log.ErrorContext(ctx, "failed to update credential sign count",
+				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Any("error", signErr))
+			return signErr
+		}
+
 		if csErr := uc.credentialSaver.Save(ctx, cred); csErr != nil {
 			uc.log.ErrorContext(ctx, "failed to save updated credential sign count",
-				slog.String("credential_id", cred.ID().String()),
-				slog.String("user_id", cred.UserID().String()),
-				slog.Any("error", csErr),
-			)
+				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Any("error", csErr))
 			return csErr
 		}
 
 		access, refresh, txErr := uc.sessionIssuer.Issue(ctx, cred.UserID(), in.DeviceInfo, in.IPAddress, now)
 		if txErr != nil {
 			uc.log.ErrorContext(ctx, "failed to issue session tokens during login",
-				slog.String("user_id", cred.UserID().String()),
-				slog.Any("error", txErr),
-			)
+				slog.String("user_id", cred.UserID().String()), slog.Any("error", txErr))
 			return txErr
 		}
 
@@ -134,17 +150,11 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 	})
 
 	if err != nil {
-		uc.log.ErrorContext(ctx, "login transaction failed",
-			slog.String("external_id", hex.EncodeToString(result.ExternalID)),
-			slog.Any("error", err),
-		)
+		uc.log.ErrorContext(ctx, "login transaction failed", slog.String("external_id", extIDStr), slog.Any("error", err))
 		return nil, err
 	}
 
-	uc.log.InfoContext(ctx, "login successfully finished",
-		slog.String("user_id", userID.String()),
-		slog.String("external_id", hex.EncodeToString(result.ExternalID)),
-	)
+	uc.log.InfoContext(ctx, "login successfully finished", slog.String("user_id", userID.String()), slog.String("external_id", extIDStr))
 
 	return &out, nil
 }

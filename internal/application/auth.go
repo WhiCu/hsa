@@ -32,6 +32,7 @@ type AuthenticationResult struct {
 	UserID       user.UserID
 	ExternalID   []byte
 	NewSignCount uint32
+	CloneWarning bool
 }
 
 // SECURITY: never log this field

@@ -13,21 +13,17 @@ type ActiveSessionsFinder interface {
 	FindActiveByUserIDs(ctx context.Context, userIDs []user.UserID, now time.Time) ([]*session.RefreshToken, error)
 }
 
-type RefreshTokenBatchSaver interface {
-	SaveAll(ctx context.Context, tokens []*session.RefreshToken) error
-}
-
 type RevokeAllUserSessions struct {
 	log        *slog.Logger
 	sessions   ActiveSessionsFinder
-	saver      RefreshTokenBatchSaver
+	saver      RefreshTokenSaver
 	transactor Transactor
 }
 
 func NewRevokeAllUserSessions(
 	log *slog.Logger,
 	sessions ActiveSessionsFinder,
-	saver RefreshTokenBatchSaver,
+	saver RefreshTokenSaver,
 	transactor Transactor,
 ) *RevokeAllUserSessions {
 	return &RevokeAllUserSessions{
@@ -39,7 +35,11 @@ func NewRevokeAllUserSessions(
 }
 
 func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.UserID) error {
-	// ⚡ Bolt: removed unnecessary userIDStrs allocation; slog natively supports UUID slice serialization
+	if len(userIDs) == 0 {
+		uc.log.WarnContext(ctx, "revoke all user sessions called with empty user list, no-op")
+		return nil
+	}
+
 	uc.log.DebugContext(ctx, "executing revoke all user sessions",
 		slog.Int("users_count", len(userIDs)),
 		slog.Any("user_ids", userIDs),
@@ -58,6 +58,11 @@ func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.Us
 			return err
 		}
 
+		if len(tokens) == 0 {
+			uc.log.DebugContext(ctx, "no active sessions to revoke", slog.Any("user_ids", userIDs))
+			return nil
+		}
+
 		for _, t := range tokens {
 			if rErr := t.Revoke(now); rErr != nil {
 				uc.log.ErrorContext(ctx, "failed to revoke session token",
@@ -69,7 +74,7 @@ func (uc *RevokeAllUserSessions) Execute(ctx context.Context, userIDs ...user.Us
 			}
 		}
 
-		if sErr := uc.saver.SaveAll(ctx, tokens); sErr != nil {
+		if sErr := uc.saver.Save(ctx, tokens...); sErr != nil {
 			uc.log.ErrorContext(ctx, "failed to save revoked sessions",
 				slog.Int("tokens_count", len(tokens)),
 				slog.Any("error", sErr),

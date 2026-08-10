@@ -132,7 +132,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 				keyID := uuid.New()
 				ids.EXPECT().NewID().Return(keyID).Once()
 
-				keys.EXPECT().SaveAll(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
+				keys.EXPECT().Save(ctx, mock.MatchedBy(func(ks []*key.WrappedKey) bool {
 					return len(ks) == 1 && ks[0].ID() == keyID
 				})).Return(nil).Once()
 
@@ -290,7 +290,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 				credentials.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
 
 				expectedErr := errors.New("db error saving keys")
-				keys.EXPECT().SaveAll(ctx, mock.Anything).Return(expectedErr).Once()
+				keys.EXPECT().Save(ctx, mock.Anything).Return(expectedErr).Once()
 
 				in := application.FinishInviteRegistrationInput{
 					ChallengeToken:       challengeToken,

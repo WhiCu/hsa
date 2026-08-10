@@ -137,6 +137,7 @@ func (a *Authenticator) Finish(ctx context.Context, challengeToken string, respo
 		UserID:       userID,
 		ExternalID:   cred.ID,
 		NewSignCount: cred.Authenticator.SignCount,
+		CloneWarning: cred.Authenticator.CloneWarning,
 	}, nil
 }
 

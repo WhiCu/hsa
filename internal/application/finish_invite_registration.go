@@ -33,7 +33,7 @@ type CredentialSaver interface {
 }
 
 type WrappedKeySaver interface {
-	SaveAll(ctx context.Context, keys []*key.WrappedKey) error
+	Save(ctx context.Context, keys ...*key.WrappedKey) error
 }
 
 type Transactor interface {
@@ -119,7 +119,7 @@ func (out FinishInviteRegistrationOutput) String() string {
 func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInviteRegistrationInput) (*FinishInviteRegistrationOutput, error) {
 	ig.log.DebugContext(ctx, "executing finish invite registration")
 
-	if len(in.WrappedKeys) == 0 {
+	if len(in.WrappedKeys) == 0 { // TODO: add policy for count of wrapped keys
 		ig.log.WarnContext(ctx, "registration rejected: no wrapped keys provided")
 		return nil, ErrWrappedKeysRequired
 	}
@@ -245,7 +245,7 @@ func (ig *FinishInviteRegistration) saveWrappedKeys(ctx context.Context, userID 
 		wrapped = append(wrapped, k)
 	}
 
-	if err := ig.keys.SaveAll(ctx, wrapped); err != nil {
+	if err := ig.keys.Save(ctx, wrapped...); err != nil {
 		ig.log.ErrorContext(ctx, "failed to save wrapped keys", slog.String("user_id", userID.String()), slog.Int("keys_count", len(wrapped)), slog.Any("error", err))
 		return err
 	}
