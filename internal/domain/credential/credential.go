@@ -14,6 +14,7 @@ var (
 	ErrExternalIDRequired  = errors.New("credential: external id is required")
 	ErrPublicKeyRequired   = errors.New("credential: public key is required")
 	ErrSignCountRegression = errors.New("credential: sign count regression detected")
+	ErrAlreadyRevoked      = errors.New("credential: already revoked")
 )
 
 type CredentialID = uuid.UUID
@@ -27,6 +28,7 @@ type Credential struct {
 	signCount  uint32
 	transports []string
 	createdAt  time.Time
+	revokedAt  *time.Time
 }
 
 func New(
@@ -71,7 +73,16 @@ func (c *Credential) PublicKey() []byte      { return c.publicKey }
 func (c *Credential) SignCount() uint32      { return c.signCount }
 func (c *Credential) Transports() []string   { return c.transports }
 func (c *Credential) CreatedAt() time.Time   { return c.createdAt }
+func (c *Credential) IsRevoked() bool        { return c.revokedAt != nil }
+func (c *Credential) RevokedAt() *time.Time  { return c.revokedAt }
 
+func (c *Credential) Revoke(now time.Time) error {
+	if c.revokedAt != nil {
+		return ErrAlreadyRevoked
+	}
+	c.revokedAt = &now
+	return nil
+}
 func (c *Credential) SetSignCount(n uint32) error {
 	if n <= c.signCount && c.signCount != 0 {
 		return ErrSignCountRegression
