@@ -34,6 +34,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 		registrator   *mocks.Registrator
 		ids           *mocks.IDGenerator
 		transactor    *mocks.Transactor
+		policy        key.Policy
 
 		uc *application.FinishInviteRegistration
 		si *application.SessionIssuer
@@ -50,6 +51,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 		ids = mocks.NewIDGenerator(GinkgoT())
 		registrator = mocks.NewRegistrator(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
+		policy = key.NewPolicy(10)
 
 		si = application.NewSessionIssuer(
 			logger.NewNOPSlog(),
@@ -71,8 +73,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 			registrator,
 			ids,
 			transactor,
-			24*time.Hour,
-			15*time.Minute,
+			policy,
 		)
 
 		// Мок транзакции: исполняет переданную замыкающую функцию

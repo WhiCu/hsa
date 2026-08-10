@@ -50,8 +50,7 @@ type FinishInviteRegistration struct {
 	registrator   Registrator
 	ids           IDGenerator
 	transactor    Transactor
-	refreshTTL    time.Duration
-	accessTTL     time.Duration
+	keyPolicy     key.Policy
 }
 
 func NewFinishInviteRegistration(
@@ -64,8 +63,7 @@ func NewFinishInviteRegistration(
 	registrator Registrator,
 	ids IDGenerator,
 	transactor Transactor,
-	refreshTTL time.Duration,
-	accessTTL time.Duration,
+	keyPolicy key.Policy,
 ) *FinishInviteRegistration {
 	return &FinishInviteRegistration{
 		log:           log,
@@ -77,8 +75,7 @@ func NewFinishInviteRegistration(
 		registrator:   registrator,
 		ids:           ids,
 		transactor:    transactor,
-		refreshTTL:    refreshTTL,
-		accessTTL:     accessTTL,
+		keyPolicy:     keyPolicy,
 	}
 }
 
@@ -119,9 +116,19 @@ func (out FinishInviteRegistrationOutput) String() string {
 func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInviteRegistrationInput) (*FinishInviteRegistrationOutput, error) {
 	ig.log.DebugContext(ctx, "executing finish invite registration")
 
-	if len(in.WrappedKeys) == 0 { // TODO: add policy for count of wrapped keys
+	keysCount := len(in.WrappedKeys)
+
+	if keysCount == 0 {
 		ig.log.WarnContext(ctx, "registration rejected: no wrapped keys provided")
 		return nil, ErrWrappedKeysRequired
+	}
+
+	if err := ig.keyPolicy.ValidateCount(keysCount); err != nil {
+		ig.log.WarnContext(ctx, "registration rejected by key policy",
+			slog.Int("keys_count", keysCount),
+			slog.Any("error", err),
+		)
+		return nil, err
 	}
 
 	now := time.Now()
