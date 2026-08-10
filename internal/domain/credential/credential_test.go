@@ -32,7 +32,7 @@ var _ = Describe("Credential", func() {
 	DescribeTable("Creation and validation checks",
 		func(id credential.CredentialID, externalID credential.ExternalID, userID user.UserID, pubKey []byte, expectedErr error) {
 			now := time.Now()
-			transports := []string{"usb", "nfc"}
+			transports := []string{"usb", "nfc"} //nolint:goconst // string used in tests
 
 			c, err := credential.New(id, externalID, userID, pubKey, transports, now)
 
@@ -64,7 +64,7 @@ var _ = Describe("Credential", func() {
 
 	Context("State mutations", func() {
 		It("should properly set and update sign count, and detect regression", func() {
-			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now())
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now()) //nolint:goconst // string used in tests
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(0)))
 
@@ -136,7 +136,7 @@ var _ = Describe("Credential", func() {
 	})
 
 	It("should redact sensitive fields in String()", func() {
-		transports := []string{"usb", "nfc"}
+		transports := []string{"usb", "nfc"} //nolint:goconst // string used in tests
 		c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("public-key"), transports, time.Now())
 		Expect(err).NotTo(HaveOccurred())
 
