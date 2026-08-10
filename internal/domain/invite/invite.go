@@ -2,6 +2,7 @@ package invite
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,4 +70,16 @@ func (i *Invite) Redeem(by user.UserID, now time.Time) error {
 	}
 	i.usedBy = &by
 	return nil
+}
+
+// SECURITY: never log this field
+func (i *Invite) String() string {
+	if i == nil {
+		return "<nil>"
+	}
+	usedByStr := "<nil>"
+	if i.usedBy != nil {
+		usedByStr = i.usedBy.String()
+	}
+	return fmt.Sprintf("Invite{id: %v, createdBy: %v, codeHash: ***REDACTED***, usedBy: %v, expiresAt: %v, createdAt: %v}", i.id, i.createdBy, usedByStr, i.expiresAt, i.createdAt)
 }

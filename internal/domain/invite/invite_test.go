@@ -136,4 +136,24 @@ var _ = Describe("Invite", func() {
 			})
 		})
 	})
+
+	It("should redact sensitive fields in String()", func() {
+		inv, err := invite.New(uuid.New(), uuid.New(), "secret-code-hash", time.Hour, time.Now())
+		Expect(err).NotTo(HaveOccurred())
+
+		str := inv.String()
+		Expect(str).To(ContainSubstring("***REDACTED***"))
+		Expect(str).NotTo(ContainSubstring("secret-code-hash"))
+
+		var nilInv *invite.Invite
+		Expect(nilInv.String()).To(Equal("<nil>"))
+	})
+
+	It("should handle nil usedBy in String()", func() {
+		inv, err := invite.New(uuid.New(), uuid.New(), "secret-code-hash", time.Hour, time.Now())
+		Expect(err).NotTo(HaveOccurred())
+
+		str := inv.String()
+		Expect(str).To(ContainSubstring("usedBy: <nil>"))
+	})
 })

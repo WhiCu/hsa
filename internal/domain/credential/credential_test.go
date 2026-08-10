@@ -28,11 +28,12 @@ func genValidUUID() *rapid.Generator[uuid.UUID] {
 }
 
 var _ = Describe("Credential", func() {
+	const usbTransport = "usb"
 
 	DescribeTable("Creation and validation checks",
 		func(id credential.CredentialID, externalID credential.ExternalID, userID user.UserID, pubKey []byte, expectedErr error) {
 			now := time.Now()
-			transports := []string{"usb", "nfc"}
+			transports := []string{usbTransport, "nfc"}
 
 			c, err := credential.New(id, externalID, userID, pubKey, transports, now)
 
@@ -64,7 +65,7 @@ var _ = Describe("Credential", func() {
 
 	Context("State mutations", func() {
 		It("should properly set and update sign count, and detect regression", func() {
-			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{"usb"}, time.Now())
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{usbTransport}, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(0)))
 
@@ -133,5 +134,19 @@ var _ = Describe("Credential", func() {
 				}
 			})
 		})
+	})
+
+	It("should redact sensitive fields in String()", func() {
+		transports := []string{usbTransport, "nfc"}
+		c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("public-key"), transports, time.Now())
+		Expect(err).NotTo(HaveOccurred())
+
+		str := c.String()
+		Expect(str).To(ContainSubstring("***REDACTED***"))
+		Expect(str).NotTo(ContainSubstring("external-id"))
+		Expect(str).NotTo(ContainSubstring("public-key"))
+
+		var nilCred *credential.Credential
+		Expect(nilCred.String()).To(Equal("<nil>"))
 	})
 })
