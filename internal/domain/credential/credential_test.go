@@ -134,4 +134,18 @@ var _ = Describe("Credential", func() {
 			})
 		})
 	})
+
+	It("should redact sensitive fields in String()", func() {
+		transports := []string{"usb", "nfc"}
+		c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("public-key"), transports, time.Now())
+		Expect(err).NotTo(HaveOccurred())
+
+		str := c.String()
+		Expect(str).To(ContainSubstring("***REDACTED***"))
+		Expect(str).NotTo(ContainSubstring("external-id"))
+		Expect(str).NotTo(ContainSubstring("public-key"))
+
+		var nilCred *credential.Credential
+		Expect(nilCred.String()).To(Equal("<nil>"))
+	})
 })
