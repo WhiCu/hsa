@@ -118,9 +118,9 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 				return credSaveErr
 			}
 			if revokeErr := uc.revokeUser.Execute(ctx, cred.UserID()); revokeErr != nil {
-				uc.log.ErrorContext(ctx, "failed to revoke compromised user chain during login",
+				uc.log.ErrorContext(ctx, "failed to revoke user sessions on credential clone detection",
 					slog.String("user_id", cred.UserID().String()), slog.Any("error", revokeErr))
-				return revokeErr // Fixed: previously returned outer 'err' which was nil
+				return revokeErr
 			}
 			return ErrCredentialCloneSuspected
 		}
