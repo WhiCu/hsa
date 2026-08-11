@@ -19,7 +19,7 @@ func NewAccessTokenVerifier(publicKey paseto.V4AsymmetricPublicKey) *AccessToken
 // SECURITY: never log this field
 func (tv *AccessTokenVerifier) String() string {
 	if tv == nil {
-		return "<nil>"
+		return nilString
 	}
 	return "AccessTokenVerifier{publicKey: ***REDACTED***}"
 }
