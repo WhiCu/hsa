@@ -1,10 +1,10 @@
 package crypto_test
 
 import (
-	"github.com/whicu/hsa/internal/infrastructure/crypto"
 	"aidanwoods.dev/go-paseto"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/whicu/hsa/internal/infrastructure/crypto"
 )
 
 var _ = Describe("AccessTokenIssuer", func() {
