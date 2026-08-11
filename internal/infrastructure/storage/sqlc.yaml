@@ -1,0 +1,28 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "query.sql"
+    schema: "schema.sql"
+    gen:
+      go:
+        package: "pg"
+        out: "pg"
+        sql_package: "pgx/v5"
+        overrides:
+          # timestamptz (NOT NULL)
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+            nullable: false
+
+          # timestamptz (NULL)
+          - db_type: "timestamptz"
+            go_type: "*time.Time"
+            nullable: true
+
+          # uuid
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+            nullable: false
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.NullUUID"
+            nullable: true
