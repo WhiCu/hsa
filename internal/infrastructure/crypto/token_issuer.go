@@ -15,6 +15,14 @@ func NewAccessTokenIssuer(secretKey paseto.V4AsymmetricSecretKey) *AccessTokenIs
 	return &AccessTokenIssuer{secretKey: secretKey}
 }
 
+// SECURITY: never log this field
+func (ti *AccessTokenIssuer) String() string {
+	if ti == nil {
+		return nilString
+	}
+	return "AccessTokenIssuer{secretKey: ***REDACTED***}"
+}
+
 func (ti *AccessTokenIssuer) IssueAccessToken(userID user.UserID, ttl time.Duration) (string, error) {
 	token := paseto.NewToken()
 	token.SetExpiration(time.Now().Add(ttl))

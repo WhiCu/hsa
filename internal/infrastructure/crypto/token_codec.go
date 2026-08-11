@@ -21,6 +21,14 @@ func NewTokenCodec(privateKey paseto.V4SymmetricKey) *TokenCodec {
 	return &TokenCodec{privateKey: privateKey}
 }
 
+// SECURITY: never log this field
+func (sc *TokenCodec) String() string {
+	if sc == nil {
+		return nilString
+	}
+	return "TokenCodec{privateKey: ***REDACTED***}"
+}
+
 func (sc *TokenCodec) Encode(payload any, ttl time.Duration) (string, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
