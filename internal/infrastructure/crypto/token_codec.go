@@ -24,7 +24,7 @@ func NewTokenCodec(privateKey paseto.V4SymmetricKey) *TokenCodec {
 // SECURITY: never log this field
 func (sc *TokenCodec) String() string {
 	if sc == nil {
-		return "<nil>"
+		return nilString
 	}
 	return "TokenCodec{privateKey: ***REDACTED***}"
 }

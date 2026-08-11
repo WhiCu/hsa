@@ -117,4 +117,13 @@ var _ = Describe("TokenCodec", func() {
 			Expect(err).NotTo(MatchError(crypto.ErrTokenExpired))
 		})
 	})
+
+	Describe("String", func() {
+		It("should redact privateKey", func() {
+			Expect(codec.String()).To(Equal("TokenCodec{privateKey: ***REDACTED***}"))
+
+			var nilCodec *crypto.TokenCodec
+			Expect(nilCodec.String()).To(Equal("<nil>"))
+		})
+	})
 })

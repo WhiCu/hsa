@@ -18,7 +18,7 @@ func NewAccessTokenIssuer(secretKey paseto.V4AsymmetricSecretKey) *AccessTokenIs
 // SECURITY: never log this field
 func (ti *AccessTokenIssuer) String() string {
 	if ti == nil {
-		return "<nil>"
+		return nilString
 	}
 	return "AccessTokenIssuer{secretKey: ***REDACTED***}"
 }

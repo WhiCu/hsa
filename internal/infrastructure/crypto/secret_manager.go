@@ -36,10 +36,12 @@ func NewSecretManager(secretKey []byte) *SecretManager {
 	}
 }
 
+const nilString = "<nil>"
+
 // SECURITY: never log this field
 func (sm *SecretManager) String() string {
 	if sm == nil {
-		return "<nil>"
+		return nilString
 	}
 	return "SecretManager{secretKey: ***REDACTED***}"
 }

@@ -16,6 +16,14 @@ func NewAccessTokenVerifier(publicKey paseto.V4AsymmetricPublicKey) *AccessToken
 	return &AccessTokenVerifier{publicKey: publicKey}
 }
 
+// SECURITY: never log this field
+func (tv *AccessTokenVerifier) String() string {
+	if tv == nil {
+		return nilString
+	}
+	return "AccessTokenVerifier{publicKey: ***REDACTED***}"
+}
+
 func (tv *AccessTokenVerifier) Verify(tokenStr string) (user.UserID, error) {
 	parser := paseto.NewParser()
 
