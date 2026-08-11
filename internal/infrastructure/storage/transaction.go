@@ -7,6 +7,7 @@ import (
 
 	"github.com/WhiCu/stgorders/db/pg"
 	"github.com/jackc/pgx/v5"
+	"github.com/whicu/hsa/pkg/errkit"
 )
 
 type txKey struct{}
@@ -29,12 +30,15 @@ func (s *Storage) runInTx(ctx context.Context, fn func(ctx context.Context) erro
 
 	defer func() {
 		if p := recover(); p != nil {
-			err = tx.Rollback(context.WithoutCancel(ctx))
-			if err != nil {
-				s.log.ErrorContext(ctx, "storage transaction rollback error on panic", slog.Any("panic", p), slog.Any("error", err))
+			rollbackErr := tx.Rollback(context.WithoutCancel(ctx))
+			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				s.log.ErrorContext(ctx, "storage transaction rollback error on panic", slog.Any("panic", p), slog.Any("error", rollbackErr))
+				err = errors.Join(errkit.NewPanicError(p), rollbackErr)
 				return
 			}
 			s.log.ErrorContext(ctx, "storage transaction panic", slog.Any("panic", p))
+			err = errkit.NewPanicError(p)
+			return
 		}
 		if err != nil {
 			s.log.DebugContext(ctx, "storage transaction rollback", slog.Any("error", err))
