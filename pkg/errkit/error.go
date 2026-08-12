@@ -34,13 +34,25 @@ func Append(err error, errs ...error) *Error {
 		return target
 	}
 
-	newErrs := make([]error, 0, len(errs)+1)
-	if err != nil {
-		newErrs = append(newErrs, err)
+	// PERFORMANCE: Avoid recursive call and extra slice allocation by
+	// allocating the exact capacity and unrolling the append loop
+	target := &Error{
+		Errors: make([]error, 0, len(errs)+1),
 	}
-	newErrs = append(newErrs, errs...)
+	if err != nil {
+		target.Errors = append(target.Errors, err)
+	}
+	for _, e := range errs {
+		if eTarget, okType := errors.AsType[*Error](e); okType {
+			if eTarget != nil {
+				target.Errors = append(target.Errors, eTarget.Errors...)
+			}
+		} else if e != nil {
+			target.Errors = append(target.Errors, e)
+		}
+	}
 
-	return Append(&Error{}, newErrs...)
+	return target
 }
 
 func (e *Error) Unwrap() []error {
