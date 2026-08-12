@@ -108,9 +108,11 @@ func (a *Authenticator) Finish(ctx context.Context, challengeToken string, respo
 				return nil, findErr
 			}
 
-			waCreds := make([]gowebauthn.Credential, 0, len(creds))
-			for _, c := range creds {
-				waCreds = append(waCreds, toWebAuthnCredential(c))
+			// PERFORMANCE: Initialize slice with length instead of capacity and assign by index
+			// to avoid append overhead (bounds checking and capacity management) in a hot path.
+			waCreds := make([]gowebauthn.Credential, len(creds))
+			for i, c := range creds {
+				waCreds[i] = toWebAuthnCredential(c)
 			}
 
 			return &webauthnUser{
