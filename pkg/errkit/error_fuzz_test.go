@@ -3,6 +3,7 @@ package errkit_test
 import (
 	"errors"
 	"testing"
+
 	"github.com/whicu/hsa/pkg/errkit"
 )
 
