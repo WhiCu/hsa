@@ -3,11 +3,13 @@ package application_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -19,6 +21,7 @@ import (
 
 var _ = Describe("RevokeAllUserSessions", func() {
 	var (
+		injector   do.Injector
 		sessions   *mocks.ActiveSessionsFinder
 		saver      *mocks.RefreshTokenSaver
 		transactor *mocks.Transactor
@@ -33,10 +36,19 @@ var _ = Describe("RevokeAllUserSessions", func() {
 		saver = mocks.NewRefreshTokenSaver(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
 
-		useCase = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), sessions, saver, transactor)
-
 		user1ID = uuid.New()
 		user2ID = uuid.New()
+
+		injector = do.New(application.Package)
+
+		do.OverrideValue[application.ActiveSessionsFinder](injector, sessions)
+		do.OverrideValue[application.RefreshTokenSaver](injector, saver)
+		do.OverrideValue[application.Transactor](injector, transactor)
+		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
+
+		var err error
+		useCase, err = do.Invoke[*application.RevokeAllUserSessions](injector)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	expectTransactionPassthrough := func(ctx context.Context) {

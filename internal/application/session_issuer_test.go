@@ -2,11 +2,13 @@ package application_test
 
 import (
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -17,6 +19,7 @@ import (
 
 var _ = Describe("SessionIssuer", func() {
 	var (
+		injector      do.Injector
 		sessions      *mocks.RefreshTokenSaver
 		refreshTokens *mocks.TokenGenerator
 		accessTokens  *mocks.TokenIssuer
@@ -41,22 +44,30 @@ var _ = Describe("SessionIssuer", func() {
 		refreshTTL = 24 * time.Hour
 		accessTTL = 15 * time.Minute
 
-		si = application.NewSessionIssuer(
-			logger.NewNOPSlog(),
-			sessions,
-			refreshTokens,
-			accessTokens,
-			ids,
-			refreshTTL,
-			accessTTL,
-		)
-
 		userID = uuid.New()
 		deviceInfo = "Mozilla/5.0 (Mobile)"
 		ipAddress = "192.168.1.200"
 		now = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	})
 
+		injector = do.New(application.Package)
+
+		do.OverrideValue[application.RefreshTokenSaver](injector, sessions)
+		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
+		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
+		do.OverrideValue[application.IDGenerator](injector, ids)
+
+		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
+		do.OverrideValue[application.Config](injector, application.Config{
+			Session: application.SessionConfig{
+				RefreshTTL: refreshTTL,
+				AccessTTL:  accessTTL,
+			},
+		})
+
+		var err error
+		si, err = do.Invoke[*application.SessionIssuer](injector)
+		Expect(err).ToNot(HaveOccurred())
+	})
 	// --- Helper Functions ---
 
 	expectRefreshGenOK := func(code, hash string) {

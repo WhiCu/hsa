@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 
 	"github.com/whicu/hsa/internal/application"
 	"github.com/whicu/hsa/internal/application/mocks"
@@ -17,6 +18,7 @@ import (
 
 var _ = Describe("BeginInviteRegistration", func() {
 	var (
+		injector    do.Injector
 		invites     *mocks.InviteFinderByCode
 		ids         *mocks.IDGenerator
 		registrator *mocks.Registrator
@@ -28,12 +30,26 @@ var _ = Describe("BeginInviteRegistration", func() {
 	)
 
 	BeforeEach(func() {
-		invites = mocks.NewInviteFinderByCode(GinkgoT())
-		ids = mocks.NewIDGenerator(GinkgoT())
-		registrator = mocks.NewRegistrator(GinkgoT())
-		hashGen = mocks.NewHashGenerator(GinkgoT())
+		{
+			invites = mocks.NewInviteFinderByCode(GinkgoT())
+			ids = mocks.NewIDGenerator(GinkgoT())
+			registrator = mocks.NewRegistrator(GinkgoT())
+			hashGen = mocks.NewHashGenerator(GinkgoT())
+		}
+		{
+			injector = do.New(application.Package)
 
-		uc = application.NewBeginInviteRegistration(logger.NewNOPSlog(), invites, ids, registrator, hashGen)
+			do.OverrideValue[application.InviteFinderByCode](injector, invites)
+			do.OverrideValue[application.IDGenerator](injector, ids)
+			do.OverrideValue[application.Registrator](injector, registrator)
+			do.OverrideValue[application.HashGenerator](injector, hashGen)
+
+			do.OverrideValue(injector, logger.NewNOPSlog())
+
+			var err error
+			uc, err = do.Invoke[*application.BeginInviteRegistration](injector)
+			Expect(err).ToNot(HaveOccurred())
+		}
 
 		inviteCode = "raw-invite-code"
 		hashResult = "hashed-invite-code"

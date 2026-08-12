@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -21,6 +22,7 @@ import (
 
 var _ = Describe("Login", func() {
 	var (
+		injector        do.Injector
 		authenticator   *mocks.Authenticator
 		credentials     *mocks.CredentialFinder
 		credentialSaver *mocks.CredentialSaver
@@ -29,9 +31,7 @@ var _ = Describe("Login", func() {
 		accessTokens    *mocks.TokenIssuer
 		ids             *mocks.IDGenerator
 		transactor      *mocks.Transactor
-
-		revokeSessions *mocks.ActiveSessionsFinder
-		revokeUser     *application.RevokeAllUserSessions
+		revokeSessions  *mocks.ActiveSessionsFinder
 
 		beginUC  *application.BeginLogin
 		finishUC *application.Login
@@ -54,29 +54,39 @@ var _ = Describe("Login", func() {
 		transactor = mocks.NewTransactor(GinkgoT())
 		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
 
-		revokeUser = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), revokeSessions, sessions, transactor)
-
 		fixedNow = time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
-
 		challengeToken = "valid-challenge-token"
 		authResp = []byte("valid-webauthn-response")
 		externalID = []byte("credential-external-id")
 		userID = uuid.New()
 
-		si := application.NewSessionIssuer(
-			logger.NewNOPSlog(),
-			sessions,
-			refreshTokens,
-			accessTokens,
-			ids,
-			24*time.Hour,
-			15*time.Minute,
-		)
+		injector = do.New(application.Package)
 
-		beginUC = application.NewBeginLogin(logger.NewNOPSlog(), authenticator)
-		finishUC = application.NewLogin(logger.NewNOPSlog(), credentials, credentialSaver, authenticator, si, revokeUser, transactor)
+		do.OverrideValue[application.Authenticator](injector, authenticator)
+		do.OverrideValue[application.CredentialFinder](injector, credentials)
+		do.OverrideValue[application.CredentialSaver](injector, credentialSaver)
+		do.OverrideValue[application.RefreshTokenSaver](injector, sessions)
+		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
+		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
+		do.OverrideValue[application.IDGenerator](injector, ids)
+		do.OverrideValue[application.Transactor](injector, transactor)
+		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
 
-		// Мок транзакции: прозрачно исполняет переданную функцию
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, application.Config{
+			Session: application.SessionConfig{
+				RefreshTTL: 24 * time.Hour,
+				AccessTTL:  15 * time.Minute,
+			},
+		})
+
+		var err error
+		beginUC, err = do.Invoke[*application.BeginLogin](injector)
+		Expect(err).ToNot(HaveOccurred())
+
+		finishUC, err = do.Invoke[*application.Login](injector)
+		Expect(err).ToNot(HaveOccurred())
+
 		transactor.EXPECT().
 			RunInTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
 			RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {

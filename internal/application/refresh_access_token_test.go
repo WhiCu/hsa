@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -20,6 +21,7 @@ import (
 
 var _ = Describe("RefreshAccessToken", func() {
 	var (
+		injector      do.Injector
 		sessionFinder *mocks.RefreshTokenFinder
 		sessionSaver  *mocks.RefreshTokenSaver
 		accessTokens  *mocks.TokenIssuer
@@ -27,17 +29,10 @@ var _ = Describe("RefreshAccessToken", func() {
 		hasher        *mocks.HashGenerator
 		ids           *mocks.IDGenerator
 
-		// зависимости отдельного, "настоящего" RevokeAllUserSessions,
-		// который подкладывается под RefreshAccessToken как конкретный
-		// тип — его нельзя заменить хендмейд-стабом, только собрать
-		// целиком на своих моках
-		revokeSessions   *mocks.ActiveSessionsFinder
-		revokeSaver      *mocks.RefreshTokenSaver
-		revokeTransactor *mocks.Transactor
-		revokeUser       *application.RevokeAllUserSessions
+		revokeSessions *mocks.ActiveSessionsFinder
+		transactor     *mocks.Transactor
 
-		sessionIssuer *application.SessionIssuer
-		useCase       *application.RefreshAccessToken
+		useCase *application.RefreshAccessToken
 
 		refreshTTL time.Duration
 		accessTTL  time.Duration
@@ -56,30 +51,37 @@ var _ = Describe("RefreshAccessToken", func() {
 		ids = mocks.NewIDGenerator(GinkgoT())
 
 		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
-		revokeSaver = mocks.NewRefreshTokenSaver(GinkgoT())
-		revokeTransactor = mocks.NewTransactor(GinkgoT())
-		revokeUser = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), revokeSessions, revokeSaver, revokeTransactor)
+		transactor = mocks.NewTransactor(GinkgoT())
 
 		refreshTTL = time.Hour
 		accessTTL = 15 * time.Minute
-		sessionIssuer = application.NewSessionIssuer(
-			logger.NewNOPSlog(),
-			sessionSaver,
-			refreshTokens,
-			accessTokens,
-			ids,
-			24*time.Hour,
-			15*time.Minute,
-		)
-		useCase = application.NewRefreshAccessToken(
-			logger.NewNOPSlog(),
-			sessionFinder, revokeUser,
-			sessionIssuer, hasher,
-		)
 
 		rawRefreshToken = "raw-refresh-token"
 		tokenHash = "hashed-refresh-token"
 		userID = uuid.New()
+
+		injector = do.New(application.Package)
+
+		do.OverrideValue[application.RefreshTokenFinder](injector, sessionFinder)
+		do.OverrideValue[application.RefreshTokenSaver](injector, sessionSaver)
+		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
+		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
+		do.OverrideValue[application.HashGenerator](injector, hasher)
+		do.OverrideValue[application.IDGenerator](injector, ids)
+		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
+		do.OverrideValue[application.Transactor](injector, transactor)
+
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, application.Config{
+			Session: application.SessionConfig{
+				RefreshTTL: refreshTTL,
+				AccessTTL:  accessTTL,
+			},
+		})
+
+		var err error
+		useCase, err = do.Invoke[*application.RefreshAccessToken](injector)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	// значения deviceInfo/ipAddress/ttl несущественны для проверок этого
@@ -152,7 +154,7 @@ var _ = Describe("RefreshAccessToken", func() {
 
 			// цепочка ожиданий "настоящего" RevokeAllUserSessions —
 			// успешный отзыв всех сессий пользователя
-			revokeTransactor.EXPECT().
+			transactor.EXPECT().
 				RunInTransaction(ctx, mock.Anything).
 				RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
 					return fn(ctx)
@@ -183,7 +185,7 @@ var _ = Describe("RefreshAccessToken", func() {
 				Return(oldRT, nil).
 				Once()
 
-			revokeTransactor.EXPECT().
+			transactor.EXPECT().
 				RunInTransaction(ctx, mock.Anything).
 				Return(revokeErr).
 				Once()

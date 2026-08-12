@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -23,30 +24,54 @@ import (
 
 var _ = Describe("CreateInvite", func() {
 	var (
+		injector   do.Injector
 		invites    *mocks.InviteSaver
 		counter    *mocks.ActiveInviteCounter
 		tokens     *mocks.TokenGenerator
 		ids        *mocks.IDGenerator
-		policy     invite.Policy
-		ttl        time.Duration
-		uc         *application.CreateInvite
 		transactor *mocks.Transactor
+		uc         *application.CreateInvite
 
 		createdBy uuid.UUID
+		ttl       time.Duration
 	)
 
 	BeforeEach(func() {
-		invites = mocks.NewInviteSaver(GinkgoT())
-		counter = mocks.NewActiveInviteCounter(GinkgoT())
-		tokens = mocks.NewTokenGenerator(GinkgoT())
-		ids = mocks.NewIDGenerator(GinkgoT())
-		policy = invite.NewPolicy(3) // limit = 3
-		transactor = mocks.NewTransactor(GinkgoT())
-		ttl = 24 * time.Hour
+		// Initialize mocks
+		{
+			invites = mocks.NewInviteSaver(GinkgoT())
+			counter = mocks.NewActiveInviteCounter(GinkgoT())
+			tokens = mocks.NewTokenGenerator(GinkgoT())
+			ids = mocks.NewIDGenerator(GinkgoT())
+			transactor = mocks.NewTransactor(GinkgoT())
+		}
 
-		uc = application.NewCreateInvite(logger.NewNOPSlog(), invites, counter, tokens, ids, policy, transactor, ttl)
+		// Initialize use case
+		{
+			ttl = 24 * time.Hour
+			createdBy = uuid.New()
 
-		createdBy = uuid.New()
+			injector = do.New(application.Package)
+
+			do.OverrideValue[application.InviteSaver](injector, invites)
+			do.OverrideValue[application.ActiveInviteCounter](injector, counter)
+			do.OverrideValue[application.TokenGenerator](injector, tokens)
+			do.OverrideValue[application.IDGenerator](injector, ids)
+			do.OverrideValue[application.Transactor](injector, transactor)
+
+			do.OverrideValue(injector, logger.NewNOPSlog())
+			do.OverrideValue(injector, application.Config{
+				Invite: application.InviteConfig{
+					MaxActive: 3,
+					TTL:       ttl,
+				},
+			})
+
+			var err error
+			uc, err = do.Invoke[*application.CreateInvite](injector)
+			Expect(err).ToNot(HaveOccurred())
+		}
+
 	})
 
 	// --- Helper Functions ---

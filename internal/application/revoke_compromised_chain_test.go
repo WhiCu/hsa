@@ -3,10 +3,12 @@ package application_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -18,17 +20,12 @@ import (
 
 var _ = Describe("RevokeCompromisedChain", func() {
 	var (
+		injector          do.Injector
 		descendantsFinder *mocks.UserDescendantsFinder
-
-		// revokeUser — конкретный *RevokeAllUserSessions, не интерфейс,
-		// поэтому его нельзя замокать напрямую: собираем настоящий
-		// юзкейс поверх его собственных моков, как и в RefreshAccessToken
-		revokeSessions   *mocks.ActiveSessionsFinder
-		revokeSaver      *mocks.RefreshTokenSaver
-		revokeTransactor *mocks.Transactor
-		revokeUser       *application.RevokeAllUserSessions
-
-		useCase *application.RevokeCompromisedChain
+		revokeSessions    *mocks.ActiveSessionsFinder
+		revokeSaver       *mocks.RefreshTokenSaver
+		transactor        *mocks.Transactor
+		useCase           *application.RevokeCompromisedChain
 
 		compromisedUserID user.UserID
 		descendant1ID     user.UserID
@@ -37,17 +34,25 @@ var _ = Describe("RevokeCompromisedChain", func() {
 
 	BeforeEach(func() {
 		descendantsFinder = mocks.NewUserDescendantsFinder(GinkgoT())
-
 		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
 		revokeSaver = mocks.NewRefreshTokenSaver(GinkgoT())
-		revokeTransactor = mocks.NewTransactor(GinkgoT())
-		revokeUser = application.NewRevokeAllUserSessions(logger.NewNOPSlog(), revokeSessions, revokeSaver, revokeTransactor)
-
-		useCase = application.NewRevokeCompromisedChain(logger.NewNOPSlog(), descendantsFinder, revokeUser)
+		transactor = mocks.NewTransactor(GinkgoT())
 
 		compromisedUserID = uuid.New()
 		descendant1ID = uuid.New()
 		descendant2ID = uuid.New()
+
+		injector = do.New(application.Package)
+
+		do.OverrideValue[application.UserDescendantsFinder](injector, descendantsFinder)
+		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
+		do.OverrideValue[application.RefreshTokenSaver](injector, revokeSaver)
+		do.OverrideValue[application.Transactor](injector, transactor)
+		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
+
+		var err error
+		useCase, err = do.Invoke[*application.RevokeCompromisedChain](injector)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	// прозрачный passthrough для транзактора внутреннего RevokeAllUserSessions —
@@ -55,7 +60,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 	// здесь важно лишь то, что RevokeCompromisedChain корректно строит
 	// список userIDs и передаёт его дальше
 	expectRevokeTransactionPassthrough := func(ctx context.Context) {
-		revokeTransactor.EXPECT().
+		transactor.EXPECT().
 			RunInTransaction(ctx, mock.Anything).
 			RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
 				return fn(ctx)
@@ -131,7 +136,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 
 			// ошибка происходит на уровне самой транзакции —
 			// RevokeAllUserSessions.Execute целиком возвращает revokeErr
-			revokeTransactor.EXPECT().
+			transactor.EXPECT().
 				RunInTransaction(ctx, mock.Anything).
 				Return(revokeErr).
 				Once()

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
@@ -24,6 +25,7 @@ import (
 
 var _ = Describe("FinishInviteRegistration", func() {
 	var (
+		injector      do.Injector
 		invites       *mocks.InviteFinderByID
 		users         *mocks.UserSaver
 		credentials   *mocks.CredentialSaver
@@ -34,10 +36,8 @@ var _ = Describe("FinishInviteRegistration", func() {
 		registrator   *mocks.Registrator
 		ids           *mocks.IDGenerator
 		transactor    *mocks.Transactor
-		policy        key.Policy
 
 		uc *application.FinishInviteRegistration
-		si *application.SessionIssuer
 	)
 
 	BeforeEach(func() {
@@ -51,32 +51,37 @@ var _ = Describe("FinishInviteRegistration", func() {
 		ids = mocks.NewIDGenerator(GinkgoT())
 		registrator = mocks.NewRegistrator(GinkgoT())
 		transactor = mocks.NewTransactor(GinkgoT())
-		policy = key.NewPolicy(10)
 
-		si = application.NewSessionIssuer(
-			logger.NewNOPSlog(),
-			sessions,
-			refreshTokens,
-			accessTokens,
-			ids,
-			24*time.Hour,
-			15*time.Minute,
-		)
+		injector = do.New(application.Package)
 
-		uc = application.NewFinishInviteRegistration(
-			logger.NewNOPSlog(),
-			invites,
-			users,
-			credentials,
-			keys,
-			si,
-			registrator,
-			ids,
-			transactor,
-			policy,
-		)
+		do.OverrideValue[application.InviteFinderByID](injector, invites)
+		do.OverrideValue[application.UserSaver](injector, users)
+		do.OverrideValue[application.CredentialSaver](injector, credentials)
+		do.OverrideValue[application.WrappedKeySaver](injector, keys)
+		do.OverrideValue[application.RefreshTokenSaver](injector, sessions)
+		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
+		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
+		do.OverrideValue[application.Registrator](injector, registrator)
+		do.OverrideValue[application.IDGenerator](injector, ids)
+		do.OverrideValue[application.Transactor](injector, transactor)
 
-		// Мок транзакции: исполняет переданную замыкающую функцию
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, application.Config{
+			Invite: application.InviteConfig{
+				MaxActive:     3,
+				TTL:           72 * time.Hour,
+				MaxWrappedKey: 10,
+			},
+			Session: application.SessionConfig{
+				RefreshTTL: 24 * time.Hour,
+				AccessTTL:  15 * time.Minute,
+			},
+		})
+
+		var err error
+		uc, err = do.Invoke[*application.FinishInviteRegistration](injector)
+		Expect(err).ToNot(HaveOccurred())
+
 		transactor.EXPECT().
 			RunInTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
 			RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
