@@ -41,6 +41,17 @@ var _ = Describe("WrappedKey", func() {
 		)
 	})
 
+	Context("Policy checks", func() {
+		It("should check wrapped key count limits strictly", func() {
+			policy := key.NewPolicy(5)
+
+			Expect(policy.ValidateCount(0)).To(Succeed())
+			Expect(policy.ValidateCount(4)).To(Succeed())
+			Expect(policy.ValidateCount(5)).To(Succeed())
+			Expect(policy.ValidateCount(6)).To(MatchError(key.ErrTooManyWrappedKeys))
+		})
+	})
+
 	Context("Constructor validation", func() {
 		DescribeTable("Invalid creation parameters",
 			func(id key.WrappedKeyID, uID user.UserID, scope key.Scope, dek []byte, alg string, expectedErr error) {
@@ -101,6 +112,22 @@ var _ = Describe("WrappedKey", func() {
 				Expect(wk.ID()).To(Equal(id))
 				Expect(wk.Scope()).To(Equal(scope))
 				Expect(wk.CredentialID()).To(Equal(credID))
+			})
+		})
+
+		It("should evaluate policy limits deterministically", func() {
+			rapid.Check(GinkgoT(), func(t *rapid.T) {
+				maxKeys := rapid.IntRange(1, 100).Draw(t, "maxKeys")
+				count := rapid.IntRange(0, 200).Draw(t, "count")
+
+				policy := key.NewPolicy(maxKeys)
+				err := policy.ValidateCount(count)
+
+				if count > maxKeys {
+					Expect(err).To(MatchError(key.ErrTooManyWrappedKeys))
+				} else {
+					Expect(err).NotTo(HaveOccurred())
+				}
 			})
 		})
 	})
