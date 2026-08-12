@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -29,9 +30,25 @@ type challengePayload struct {
 	UserID      user.UserID            `json:"user_id"`
 }
 
+// SECURITY: never log this field
+func (p *challengePayload) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("challengePayload{SessionData: ***REDACTED***, InviteID: %v, UserID: %v}", p.InviteID, p.UserID)
+}
+
 type webauthnUser struct {
 	id          user.UserID
 	credentials []gowebauthn.Credential
+}
+
+// SECURITY: never log this field
+func (u *webauthnUser) String() string {
+	if u == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("webauthnUser{id: %v, credentials: ***REDACTED***}", u.id)
 }
 
 func (u *webauthnUser) WebAuthnID() []byte                           { return u.id[:] }
