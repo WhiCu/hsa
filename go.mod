@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/WhiCu/stgorders v1.0.0
+	github.com/amirsalarsafaei/sqlc-pgx-monitoring v1.7.3
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/google/uuid v1.6.0
