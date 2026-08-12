@@ -104,66 +104,6 @@ func newResource(i do.Injector) (*resource.Resource, error) {
 	return InitResource(ctx, cfg)
 }
 
-// func newTracerProvider(i do.Injector) (*sdktrace.TracerProvider, error) {
-// 	cfg, err := do.Invoke[Config](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	ctx, err := do.Invoke[context.Context](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	res, err := do.Invoke[*resource.Resource](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	conn, err := do.Invoke[*grpc.ClientConn](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return InitTracerProvider(ctx, cfg, res, conn)
-// }
-
-// func newMeterProvider(i do.Injector) (*sdkmetric.MeterProvider, error) {
-// 	cfg, err := do.Invoke[Config](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	ctx, err := do.Invoke[context.Context](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	res, err := do.Invoke[*resource.Resource](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	conn, err := do.Invoke[*grpc.ClientConn](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return InitMeterProvider(ctx, cfg, res, conn)
-// }
-
-// func newLoggerProvider(i do.Injector) (*sdklog.LoggerProvider, error) {
-// 	cfg, err := do.Invoke[Config](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	ctx, err := do.Invoke[context.Context](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	res, err := do.Invoke[*resource.Resource](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	conn, err := do.Invoke[*grpc.ClientConn](i)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return InitLoggerProvider(ctx, cfg, res, conn)
-// }
-
 func newTelemetry(i do.Injector) (*Service, error) {
 	cfg, err := do.Invoke[Config](i)
 	if err != nil {
@@ -211,8 +151,5 @@ var Package = do.Package(
 	do.Lazy(newConn),
 	do.Lazy(newConfig),
 	do.Lazy(newResource),
-	// do.Lazy(newTracerProvider),
-	// do.Lazy(newMeterProvider),
-	// do.Lazy(newLoggerProvider),
 	do.Lazy(newTelemetry),
 )
