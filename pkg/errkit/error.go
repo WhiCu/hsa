@@ -17,30 +17,33 @@ func (e *Error) Error() string {
 }
 
 func Append(err error, errs ...error) *Error {
+	targetBase := &Error{}
+
 	if target, ok := errors.AsType[*Error](err); ok {
-		if target == nil {
-			target = &Error{}
+		if target != nil {
+			// Shallow copy the base target (preserves ErrorFormat and any other fields)
+			newTarget := *target
+			targetBase = &newTarget
+
+			// Deep copy the slice to avoid mutation side-effects
+			targetBase.Errors = make([]error, len(target.Errors))
+			copy(targetBase.Errors, target.Errors)
 		}
-		for _, e := range errs {
-			if eTarget, okType := errors.AsType[*Error](e); okType {
-				if eTarget != nil {
-					target.Errors = append(target.Errors, eTarget.Errors...)
-				}
-			} else if e != nil {
-				target.Errors = append(target.Errors, e)
+	} else if err != nil {
+		targetBase.Errors = append(targetBase.Errors, err)
+	}
+
+	for _, e := range errs {
+		if eTarget, okType := errors.AsType[*Error](e); okType {
+			if eTarget != nil {
+				targetBase.Errors = append(targetBase.Errors, eTarget.Errors...)
 			}
+		} else if e != nil {
+			targetBase.Errors = append(targetBase.Errors, e)
 		}
-
-		return target
 	}
 
-	newErrs := make([]error, 0, len(errs)+1)
-	if err != nil {
-		newErrs = append(newErrs, err)
-	}
-	newErrs = append(newErrs, errs...)
-
-	return Append(&Error{}, newErrs...)
+	return targetBase
 }
 
 func (e *Error) Unwrap() []error {

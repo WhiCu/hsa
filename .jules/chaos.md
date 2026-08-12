@@ -1,5 +1,4 @@
-
-## 2024-05-24 - [SecretManager Panic on Negative Token Length]
-**Crash/Bug:** Calling `SecretManager.GenerateToken` with a negative length (`n < 0`) causes a panic (`runtime error: makeslice: len out of range`) due to `make([]byte, n)` in `generateRandomBase32`.
-**Learning:** Functions accepting length parameters that directly feed into memory allocation functions like `make` must validate boundaries, especially against negative inputs. Without validation, this can lead to unhandled panics and potential DoS if the length is influenced by user input.
-**Prevention:** Always bound-check length parameters (`n < 0` or against maximum allowed lengths) before using them in `make([]byte, n)`.
+## 2025-02-12 - errkit Mutation Leak
+**Crash/Bug:** errkit.Append mutates the underlying `*Error` target slice in-place, leading to data races and cross-contamination when the same base error is handled in multiple branches or concurrent goroutines.
+**Learning:** `errors.AsType` yields a pointer to the original error object. Modifying properties on this pointer without a deep copy violates the immutability expectations of error handling.
+**Prevention:** When extending error chains or composite errors, always create a deep copy of slices to ensure copy-on-write semantics. Avoid mutating state exposed by `errors.As`.
