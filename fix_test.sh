@@ -1,0 +1,3 @@
+export GO111MODULE=on
+go mod tidy
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...

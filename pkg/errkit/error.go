@@ -18,35 +18,27 @@ func (e *Error) Error() string {
 
 func Append(err error, errs ...error) *Error {
 	if target, ok := errors.AsType[*Error](err); ok {
-		newTarget := &Error{}
-		if target != nil {
-			newTarget.ErrorFormat = target.ErrorFormat
-			newTarget.Errors = make([]error, len(target.Errors))
-			copy(newTarget.Errors, target.Errors)
+		if target == nil {
+			target = &Error{}
 		}
-
 		for _, e := range errs {
 			if eTarget, okType := errors.AsType[*Error](e); okType {
 				if eTarget != nil {
-					newTarget.Errors = append(newTarget.Errors, eTarget.Errors...)
+					target.Errors = append(target.Errors, eTarget.Errors...)
 				}
 			} else if e != nil {
-				newTarget.Errors = append(newTarget.Errors, e)
+				target.Errors = append(target.Errors, e)
 			}
 		}
 
-		return newTarget
+		return target
 	}
 
 	newErrs := make([]error, 0, len(errs)+1)
 	if err != nil {
 		newErrs = append(newErrs, err)
 	}
-	for _, e := range errs {
-		if e != nil {
-			newErrs = append(newErrs, e)
-		}
-	}
+	newErrs = append(newErrs, errs...)
 
 	return Append(&Error{}, newErrs...)
 }

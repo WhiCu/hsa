@@ -1,6 +1,6 @@
 module github.com/whicu/hsa
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/WhiCu/stgorders v1.0.0
