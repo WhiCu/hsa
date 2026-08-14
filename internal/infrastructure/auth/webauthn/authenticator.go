@@ -26,6 +26,11 @@ type loginChallengePayload struct {
 	SessionData gowebauthn.SessionData `json:"session_data"`
 }
 
+// SECURITY: never log this field
+func (p loginChallengePayload) String() string {
+	return "loginChallengePayload{SessionData: ***REDACTED***}"
+}
+
 type Authenticator struct {
 	log         *slog.Logger
 	wa          *gowebauthn.WebAuthn

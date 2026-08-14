@@ -63,4 +63,21 @@ var _ = Describe("Registrator", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(res.UserID).To(Equal(uuid.Nil))
 	})
+
+	It("should stringify challengePayload redacting SessionData", func() {
+		payload := challengePayload{
+			SessionData: gowebauthn.SessionData{
+				Challenge: "super-secret-challenge",
+				UserID:    userID[:],
+			},
+			InviteID: inviteID,
+			UserID:   userID,
+		}
+
+		str := payload.String()
+		Expect(str).To(ContainSubstring("***REDACTED***"))
+		Expect(str).NotTo(ContainSubstring("super-secret-challenge"))
+		Expect(str).To(ContainSubstring("InviteID: " + inviteID.String()))
+		Expect(str).To(ContainSubstring("UserID: " + userID.String()))
+	})
 })
