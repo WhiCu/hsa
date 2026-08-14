@@ -5,8 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/WhiCu/stgorders/db/pg"
 	"github.com/jackc/pgx/v5"
+	"github.com/whicu/hsa/internal/infrastructure/storage/pg"
 	"github.com/whicu/hsa/pkg/errkit"
 )
 

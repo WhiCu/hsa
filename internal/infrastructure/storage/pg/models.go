@@ -7,6 +7,7 @@ package pg
 import (
 	"database/sql/driver"
 	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,10 +60,10 @@ type Credential struct {
 	ExternalID []byte
 	UserID     uuid.UUID
 	PublicKey  []byte
-	SignCount  int64
+	SignCount  uint32
 	Transports []string
 	CreatedAt  time.Time
-	RevokedAt  **time.Time
+	RevokedAt  *time.Time
 }
 
 type Invite struct {
@@ -79,9 +80,9 @@ type RefreshToken struct {
 	UserID     uuid.UUID
 	TokenHash  string
 	DeviceInfo string
-	IpAddress  string
+	IpAddress  netip.Addr
 	ExpiresAt  time.Time
-	RevokedAt  **time.Time
+	RevokedAt  *time.Time
 	CreatedAt  time.Time
 }
 

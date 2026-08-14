@@ -43,7 +43,7 @@ CREATE TABLE refresh_tokens (
     user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash   TEXT NOT NULL,
     device_info  TEXT NOT NULL DEFAULT '',
-    ip_address   TEXT NOT NULL DEFAULT '',
+    ip_address   INET NOT NULL DEFAULT '0.0.0.0',
     expires_at   TIMESTAMPTZ NOT NULL,
     revoked_at   TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()

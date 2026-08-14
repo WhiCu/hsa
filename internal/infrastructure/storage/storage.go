@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/WhiCu/stgorders/db/pg"
 	"github.com/amirsalarsafaei/sqlc-pgx-monitoring/dbtracer"
 	"github.com/amirsalarsafaei/sqlc-pgx-monitoring/poolstatus"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/whicu/hsa/internal/infrastructure/storage/migrations"
+	"github.com/whicu/hsa/internal/infrastructure/storage/pg"
 	"go.opentelemetry.io/otel"
 )
 
@@ -74,6 +76,32 @@ func NewStorage(ctx context.Context, log *slog.Logger, cfg Config) (*Storage, er
 		queries: queries,
 		log:     log,
 	}, nil
+}
+
+func (s *Storage) Ping(ctx context.Context) error {
+	return s.db.Ping(ctx)
+}
+
+func (s *Storage) Up(ctx context.Context) error {
+	sqlDB := stdlib.OpenDB(*s.db.Config().ConnConfig)
+	defer sqlDB.Close()
+
+	if err := migrations.Up(ctx, sqlDB); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) Reset(ctx context.Context) error {
+	sqlDB := stdlib.OpenDB(*s.db.Config().ConnConfig)
+	defer sqlDB.Close()
+
+	if err := migrations.Reset(ctx, sqlDB); err != nil {
+		return fmt.Errorf("reset: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Storage) Shutdown() {

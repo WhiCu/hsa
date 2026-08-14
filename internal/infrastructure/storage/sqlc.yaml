@@ -16,8 +16,11 @@ sql:
 
           # timestamptz (NULL)
           - db_type: "timestamptz"
-            go_type: "*time.Time"
             nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
 
           # uuid
           - db_type: "uuid"
@@ -26,3 +29,11 @@ sql:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.NullUUID"
             nullable: true
+
+          # inet
+          - db_type: "inet"
+            go_type: "net/netip.Addr"
+            nullable: false
+          
+          - column: "credentials.sign_count"
+            go_type: "uint32"

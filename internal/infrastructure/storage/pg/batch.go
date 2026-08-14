@@ -8,6 +8,7 @@ package pg
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,9 +39,9 @@ type SaveRefreshTokensParams struct {
 	UserID     uuid.UUID
 	TokenHash  string
 	DeviceInfo string
-	IpAddress  string
+	IpAddress  netip.Addr
 	ExpiresAt  time.Time
-	RevokedAt  **time.Time
+	RevokedAt  *time.Time
 	CreatedAt  time.Time
 }
 

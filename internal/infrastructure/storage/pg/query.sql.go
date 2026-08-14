@@ -234,10 +234,10 @@ type SaveCredentialParams struct {
 	ExternalID []byte
 	UserID     uuid.UUID
 	PublicKey  []byte
-	SignCount  int64
+	SignCount  uint32
 	Transports []string
 	CreatedAt  time.Time
-	RevokedAt  **time.Time
+	RevokedAt  *time.Time
 }
 
 func (q *Queries) SaveCredential(ctx context.Context, arg SaveCredentialParams) error {
