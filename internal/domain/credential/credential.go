@@ -99,3 +99,16 @@ func (c *Credential) String() string {
 	}
 	return fmt.Sprintf("Credential{id: %v, externalID: ***REDACTED***, userID: %v, publicKey: ***REDACTED***, signCount: %d, transports: %v, createdAt: %v}", c.id, c.userID, c.signCount, c.transports, c.createdAt)
 }
+
+func Reconstruct(id CredentialID, externalID ExternalID, userID user.UserID, publicKey []byte, signCount uint32, transports []string, createdAt time.Time, revokedAt *time.Time) *Credential {
+	return &Credential{
+		id:         id,
+		externalID: externalID,
+		userID:     userID,
+		publicKey:  publicKey,
+		signCount:  signCount,
+		transports: transports,
+		createdAt:  createdAt,
+		revokedAt:  revokedAt,
+	}
+}

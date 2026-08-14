@@ -60,3 +60,7 @@ func (u *User) ID() UserID           { return u.id }
 func (u *User) InvitedBy() *UserID   { return u.invitedBy }
 func (u *User) IsRoot() bool         { return u.invitedBy == nil }
 func (u *User) CreatedAt() time.Time { return u.createdAt }
+
+func Reconstruct(id UserID, invitedBy *UserID, createdAt time.Time) *User {
+	return &User{id: id, invitedBy: invitedBy, createdAt: createdAt}
+}

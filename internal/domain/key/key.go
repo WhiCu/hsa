@@ -76,8 +76,12 @@ func New(
 }
 
 func (k *WrappedKey) ID() WrappedKeyID                       { return k.id }
+func (k *WrappedKey) UserID() user.UserID                    { return k.userID }
 func (k *WrappedKey) Scope() Scope                           { return k.scope }
 func (k *WrappedKey) CredentialID() *credential.CredentialID { return k.credentialID }
+func (k *WrappedKey) WrappedDEK() []byte                     { return k.wrappedDEK }
+func (k *WrappedKey) WrapAlgorithm() string                  { return k.wrapAlgorithm }
+func (k *WrappedKey) CreatedAt() time.Time                   { return k.createdAt }
 
 // SECURITY: never log this field
 func (k *WrappedKey) String() string {
