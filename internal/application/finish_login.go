@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain"
@@ -57,7 +58,7 @@ type LoginInput struct {
 	ChallengeToken         string
 	AuthenticationResponse []byte
 	DeviceInfo             string
-	IPAddress              string
+	IPAddress              netip.Addr
 }
 
 // SECURITY: never log this field

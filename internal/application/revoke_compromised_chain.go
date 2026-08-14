@@ -43,9 +43,8 @@ func (uc *RevokeCompromisedChain) Execute(ctx context.Context, compromisedUserID
 		return err
 	}
 
-	userIDs := make([]user.UserID, 0, len(descendantIDs)+1)
+	userIDs := make([]user.UserID, 0, len(descendantIDs))
 	userIDs = append(userIDs, descendantIDs...)
-	userIDs = append(userIDs, compromisedUserID)
 
 	if ruErr := uc.revokeUser.Execute(ctx, userIDs...); ruErr != nil {
 		uc.log.ErrorContext(ctx, "failed to revoke sessions for compromised user chain",

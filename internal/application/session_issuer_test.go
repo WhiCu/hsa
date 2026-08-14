@@ -2,7 +2,7 @@ package application_test
 
 import (
 	"errors"
-	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +31,7 @@ var _ = Describe("SessionIssuer", func() {
 
 		userID     uuid.UUID
 		deviceInfo string
-		ipAddress  string
+		ipAddress  netip.Addr
 		now        time.Time
 	)
 
@@ -46,7 +46,7 @@ var _ = Describe("SessionIssuer", func() {
 
 		userID = uuid.New()
 		deviceInfo = "Mozilla/5.0 (Mobile)"
-		ipAddress = "192.168.1.200"
+		ipAddress = netip.MustParseAddr("192.168.1.100")
 		now = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 		injector = do.New(application.Package)
@@ -56,8 +56,8 @@ var _ = Describe("SessionIssuer", func() {
 		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
 		do.OverrideValue[application.IDGenerator](injector, ids)
 
-		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
-		do.OverrideValue[application.Config](injector, application.Config{
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, application.Config{
 			Session: application.SessionConfig{
 				RefreshTTL: refreshTTL,
 				AccessTTL:  accessTTL,

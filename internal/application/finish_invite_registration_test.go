@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -159,7 +160,7 @@ var _ = Describe("FinishInviteRegistration", func() {
 						{Scope: key.ScopeMain, WrappedDEK: []byte("dek"), WrapAlgorithm: "alg"},
 					},
 					DeviceInfo: "device",
-					IPAddress:  "192.168.1.100",
+					IPAddress:  netip.MustParseAddr("192.168.1.100"),
 				}
 
 				out, err := uc.Execute(ctx, in)

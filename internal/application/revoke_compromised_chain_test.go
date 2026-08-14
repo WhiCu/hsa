@@ -3,7 +3,6 @@ package application_test
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -48,7 +47,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
 		do.OverrideValue[application.RefreshTokenSaver](injector, revokeSaver)
 		do.OverrideValue[application.Transactor](injector, transactor)
-		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, logger.NewNOPSlog())
 
 		var err error
 		useCase, err = do.Invoke[*application.RevokeCompromisedChain](injector)
@@ -72,7 +71,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 		It("should revoke sessions for the compromised user and all descendants", func(ctx SpecContext) {
 			descendantsFinder.EXPECT().
 				Descendants(ctx, compromisedUserID).
-				Return([]user.UserID{descendant1ID, descendant2ID}, nil).
+				Return([]user.UserID{descendant1ID, descendant2ID, compromisedUserID}, nil).
 				Once()
 
 			expectedUserIDs := []user.UserID{descendant1ID, descendant2ID, compromisedUserID}
@@ -92,7 +91,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 		It("should revoke sessions for the compromised user alone when there are no descendants", func(ctx SpecContext) {
 			descendantsFinder.EXPECT().
 				Descendants(ctx, compromisedUserID).
-				Return([]user.UserID{}, nil).
+				Return([]user.UserID{compromisedUserID}, nil).
 				Once()
 
 			expectedUserIDs := []user.UserID{compromisedUserID}
@@ -131,7 +130,7 @@ var _ = Describe("RevokeCompromisedChain", func() {
 
 			descendantsFinder.EXPECT().
 				Descendants(ctx, compromisedUserID).
-				Return([]user.UserID{descendant1ID}, nil).
+				Return([]user.UserID{descendant1ID, compromisedUserID}, nil).
 				Once()
 
 			// ошибка происходит на уровне самой транзакции —

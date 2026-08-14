@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,7 +90,7 @@ var _ = Describe("RefreshAccessToken", func() {
 	newOldToken := func(now time.Time, ttl time.Duration) *session.RefreshToken {
 		rt, err := session.New(
 			uuid.New(), userID, tokenHash,
-			"test-device", "127.0.0.1",
+			"test-device", netip.MustParseAddr("192.168.1.100"),
 			ttl, now,
 		)
 		Expect(err).NotTo(HaveOccurred())

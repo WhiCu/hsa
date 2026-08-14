@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,10 +29,11 @@ func genValidUUID() *rapid.Generator[uuid.UUID] {
 }
 
 var _ = Describe("RefreshToken Domain", func() {
+	ip := netip.MustParseAddr("192.168.1.1")
 
 	Context("Constructor validation", func() {
 		It("should redact sensitive fields in String()", func() {
-			rt, err := session.New(uuid.New(), uuid.New(), "secret-token-hash", "device", "127.0.0.1", time.Hour, time.Now())
+			rt, err := session.New(uuid.New(), uuid.New(), "secret-token-hash", "device", ip, time.Hour, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 
 			str := rt.String()
@@ -44,7 +46,7 @@ var _ = Describe("RefreshToken Domain", func() {
 
 		DescribeTable("Invalid initialization",
 			func(id session.RefreshTokenID, uID user.UserID, tokenHash string, expectedErr error) {
-				rt, err := session.New(id, uID, tokenHash, "device", "127.0.0.1", time.Hour, time.Now())
+				rt, err := session.New(id, uID, tokenHash, "device", ip, time.Hour, time.Now())
 				Expect(rt).To(BeNil())
 				Expect(err).To(MatchError(domain.ErrValidation))
 				Expect(err).To(MatchError(expectedErr))
@@ -65,7 +67,7 @@ var _ = Describe("RefreshToken Domain", func() {
 		BeforeEach(func() {
 			now = time.Now()
 			var err error
-			rt, err = session.New(uuid.New(), uuid.New(), "token-hash", "Chrome", "192.168.1.1", time.Hour, now)
+			rt, err = session.New(uuid.New(), uuid.New(), "token-hash", "Chrome", ip, time.Hour, now)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -102,7 +104,7 @@ var _ = Describe("RefreshToken Domain", func() {
 				ttl := time.Duration(ttlSec) * time.Second
 
 				now := time.Unix(1700000000, 0)
-				rt, err := session.New(id, uID, tokenHash, "ua", "127.0.0.1", ttl, now)
+				rt, err := session.New(id, uID, tokenHash, "ua", ip, ttl, now)
 				Expect(err).NotTo(HaveOccurred())
 
 				checkTimeSec := rapid.Int64Range(0, 7200).Draw(t, "checkTimeOffset")

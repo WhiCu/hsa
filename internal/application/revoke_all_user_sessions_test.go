@@ -3,7 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,7 +44,7 @@ var _ = Describe("RevokeAllUserSessions", func() {
 		do.OverrideValue[application.ActiveSessionsFinder](injector, sessions)
 		do.OverrideValue[application.RefreshTokenSaver](injector, saver)
 		do.OverrideValue[application.Transactor](injector, transactor)
-		do.OverrideValue[*slog.Logger](injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, logger.NewNOPSlog())
 
 		var err error
 		useCase, err = do.Invoke[*application.RevokeAllUserSessions](injector)
@@ -63,7 +63,7 @@ var _ = Describe("RevokeAllUserSessions", func() {
 	newToken := func(uid user.UserID) *session.RefreshToken {
 		token, err := session.New(
 			uuid.New(), uid,
-			"test-token-hash", "test-device", "127.0.0.1",
+			"test-token-hash", "test-device", netip.MustParseAddr("192.168.1.100"),
 			time.Hour, time.Now(),
 		)
 		Expect(err).NotTo(HaveOccurred())

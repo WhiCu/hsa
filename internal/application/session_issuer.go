@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain/session"
@@ -48,11 +49,11 @@ func NewSessionIssuer(
 	}
 }
 
-func (si *SessionIssuer) Issue(ctx context.Context, userID user.UserID, deviceInfo, ipAddress string, now time.Time) (access, refresh string, err error) {
+func (si *SessionIssuer) Issue(ctx context.Context, userID user.UserID, deviceInfo string, ipAddress netip.Addr, now time.Time) (access, refresh string, err error) {
 	si.log.DebugContext(ctx, "issuing session tokens",
 		slog.String("user_id", userID.String()),
 		slog.String("device_info", deviceInfo),
-		slog.String("ip_address", ipAddress),
+		slog.String("ip_address", ipAddress.String()),
 	)
 
 	rawRefresh, refreshHash, err := si.refreshTokens.GenerateToken(refreshTokenLength)

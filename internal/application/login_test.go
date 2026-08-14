@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -102,7 +103,7 @@ var _ = Describe("Login", func() {
 			ChallengeToken:         challengeToken,
 			AuthenticationResponse: authResp,
 			DeviceInfo:             "Chrome on macOS",
-			IPAddress:              "192.168.1.1",
+			IPAddress:              netip.MustParseAddr("192.168.1.100"),
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain"
@@ -95,7 +96,7 @@ type FinishInviteRegistrationInput struct {
 	RegistrationResponse []byte
 	WrappedKeys          []WrappedKeyInput
 	DeviceInfo           string
-	IPAddress            string
+	IPAddress            netip.Addr
 }
 
 // SECURITY: never log this field
