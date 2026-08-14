@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
 	"github.com/whicu/hsa/pkg/errkit"
 )
 
@@ -23,12 +24,12 @@ func TestFuzz_AppendMutation(t *testing.T) {
 }
 
 func TestFuzz_AppendNil(t *testing.T) {
-    var err error
-    appended := errkit.Append(err, nil, nil)
-    if appended == nil {
-        t.Fatal("expected non-nil error")
-    }
-    if len(appended.Errors) != 0 {
-        t.Fatalf("expected 0 errors, got %d", len(appended.Errors))
-    }
+	var err error
+	appended := errkit.Append(err, nil, nil)
+	if appended == nil {
+		t.Fatal("expected non-nil error")
+	}
+	if len(appended.Errors) != 0 {
+		t.Fatalf("expected 0 errors, got %d", len(appended.Errors))
+	}
 }
