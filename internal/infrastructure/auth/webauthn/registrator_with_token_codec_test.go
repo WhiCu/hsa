@@ -4,32 +4,44 @@ import (
 	"time"
 
 	"aidanwoods.dev/go-paseto"
-	gowebauthn "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
+
 	webauthnadapter "github.com/whicu/hsa/internal/infrastructure/auth/webauthn"
 	"github.com/whicu/hsa/internal/infrastructure/crypto"
 	"github.com/whicu/hsa/pkg/logger"
 )
 
-var _ = Describe("RegistratorWithTokenCodec", func() {
+var _ = Describe("Registrator with Real TokenCodec (PASETO)", func() {
 	var (
-		wa         *gowebauthn.WebAuthn
+		injector   do.Injector
 		tokenCodec *crypto.TokenCodec
 		reg        *webauthnadapter.Registrator
 		ttl        time.Duration
 	)
 
 	BeforeEach(func() {
-		wa = newTestWebAuthn(GinkgoT())
 		pasetoKey := paseto.NewV4SymmetricKey()
 		tokenCodec = crypto.NewTokenCodec(pasetoKey)
 		ttl = 5 * time.Minute
-		reg = webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, tokenCodec, ttl)
+
+		cfg := testConfig
+		cfg.ChallengeTTL = ttl
+
+		injector = do.New(webauthnadapter.Package)
+
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, cfg)
+		do.OverrideValue[webauthnadapter.ChallengeCodec](injector, tokenCodec)
+
+		var err error
+		reg, err = do.Invoke[*webauthnadapter.Registrator](injector)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should successfully execute full Begin flow and generate a valid decryptable PASETO token", func(ctx SpecContext) {
+	It("successfully executes full Begin flow and generates a valid decryptable PASETO token", func(ctx SpecContext) {
 		userID := uuid.New()
 		inviteID := uuid.New()
 
@@ -47,8 +59,17 @@ var _ = Describe("RegistratorWithTokenCodec", func() {
 		Expect(decoded).To(HaveKey("user_id"))
 	})
 
-	It("should reject Finish operation when PASETO token is expired", func(ctx SpecContext) {
-		expiredReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, tokenCodec, -time.Minute)
+	It("rejects Finish operation when PASETO token is expired", func(ctx SpecContext) {
+		expiredCfg := testConfig
+		expiredCfg.ChallengeTTL = -time.Minute
+
+		expiredInjector := do.New(webauthnadapter.Package)
+		do.OverrideValue(expiredInjector, logger.NewNOPSlog())
+		do.OverrideValue(expiredInjector, expiredCfg)
+		do.OverrideValue[webauthnadapter.ChallengeCodec](expiredInjector, tokenCodec)
+
+		expiredReg, err := do.Invoke[*webauthnadapter.Registrator](expiredInjector)
+		Expect(err).NotTo(HaveOccurred())
 
 		userID := uuid.New()
 		inviteID := uuid.New()
@@ -61,9 +82,17 @@ var _ = Describe("RegistratorWithTokenCodec", func() {
 		Expect(err).To(MatchError(webauthnadapter.ErrChallengeExpired))
 		Expect(res.UserID).To(Equal(uuid.Nil))
 	})
-	It("should reject Finish operation when token is tampered or signed with a different key", func(ctx SpecContext) {
+
+	It("rejects Finish operation when token is tampered or signed with a different key", func(ctx SpecContext) {
 		otherCodec := crypto.NewTokenCodec(paseto.NewV4SymmetricKey())
-		otherReg := webauthnadapter.NewRegistrator(logger.NewNOPSlog(), wa, otherCodec, ttl)
+
+		otherInjector := do.New(webauthnadapter.Package)
+		do.OverrideValue(otherInjector, logger.NewNOPSlog())
+		do.OverrideValue(otherInjector, testConfig)
+		do.OverrideValue[webauthnadapter.ChallengeCodec](otherInjector, otherCodec)
+
+		otherReg, err := do.Invoke[*webauthnadapter.Registrator](otherInjector)
+		Expect(err).NotTo(HaveOccurred())
 
 		userID := uuid.New()
 		inviteID := uuid.New()

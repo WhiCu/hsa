@@ -4,9 +4,10 @@ import (
 	"errors"
 	"time"
 
-	gowebauthn "github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/mock"
 
 	webauthnadapter "github.com/whicu/hsa/internal/infrastructure/auth/webauthn"
@@ -16,7 +17,7 @@ import (
 
 var _ = Describe("Authenticator", func() {
 	var (
-		wa        *gowebauthn.WebAuthn
+		injector  do.Injector
 		codec     *mocks.ChallengeCodec
 		credsProv *mocks.CredentialsProvider
 		auth      *webauthnadapter.Authenticator
@@ -24,15 +25,24 @@ var _ = Describe("Authenticator", func() {
 	)
 
 	BeforeEach(func() {
-		wa = newTestWebAuthn(GinkgoT())
 		codec = mocks.NewChallengeCodec(GinkgoT())
 		credsProv = mocks.NewCredentialsProvider(GinkgoT())
-		ttl = time.Minute
-		auth = webauthnadapter.NewAuthenticator(logger.NewNOPSlog(), wa, codec, credsProv, ttl)
+		ttl = testConfig.ChallengeTTL
+
+		injector = do.New(webauthnadapter.Package)
+
+		do.OverrideValue(injector, logger.NewNOPSlog())
+		do.OverrideValue(injector, testConfig)
+		do.OverrideValue[webauthnadapter.ChallengeCodec](injector, codec)
+		do.OverrideValue[webauthnadapter.CredentialsProvider](injector, credsProv)
+
+		var err error
+		auth, err = do.Invoke[*webauthnadapter.Authenticator](injector)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Describe("Begin", func() {
-		It("should successfully create login options and an encoded challenge token", func(ctx SpecContext) {
+		It("successfully creates discoverable login options and an encoded challenge token", func(ctx SpecContext) {
 			codec.EXPECT().
 				Encode(mock.Anything, ttl).
 				Return(testChallengeToken, nil).
@@ -46,7 +56,7 @@ var _ = Describe("Authenticator", func() {
 			Expect(string(optsJSON)).To(ContainSubstring("publicKey"))
 		})
 
-		It("should fail if challenge codec encoding returns an error", func(ctx SpecContext) {
+		It("fails when challenge codec encoding returns an error", func(ctx SpecContext) {
 			encodeErr := errors.New("encode failed")
 			codec.EXPECT().
 				Encode(mock.Anything, ttl).
@@ -62,7 +72,7 @@ var _ = Describe("Authenticator", func() {
 	})
 
 	Describe("Finish", func() {
-		It("should return ErrChallengeExpired if token decoding fails", func(ctx SpecContext) {
+		It("returns ErrChallengeExpired when challenge token decoding fails", func(ctx SpecContext) {
 			decodeErr := errors.New("decode failed")
 			codec.EXPECT().
 				Decode(testChallengeToken, mock.Anything).
@@ -72,10 +82,10 @@ var _ = Describe("Authenticator", func() {
 			res, err := auth.Finish(ctx, testChallengeToken, []byte("{}"))
 
 			Expect(err).To(MatchError(webauthnadapter.ErrChallengeExpired))
-			Expect(res.UserID.String()).To(Equal("00000000-0000-0000-0000-000000000000"))
+			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
 
-		It("should return error when raw credential request response is invalid", func(ctx SpecContext) {
+		It("returns error when raw credential request response payload is invalid", func(ctx SpecContext) {
 			codec.EXPECT().
 				Decode(testChallengeToken, mock.Anything).
 				Return(nil).
@@ -87,7 +97,7 @@ var _ = Describe("Authenticator", func() {
 
 			Expect(err).To(HaveOccurred())
 			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
-			Expect(res.UserID.String()).To(Equal("00000000-0000-0000-0000-000000000000"))
+			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
 	})
 })

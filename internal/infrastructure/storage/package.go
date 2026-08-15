@@ -15,7 +15,7 @@ func newConfig(i do.Injector) (Config, error) {
 		return Config{}, err
 	}
 	def := defaultCfg
-	return config.GetConfig(k, "logger", &def)
+	return config.GetConfig(k, "storage", &def)
 }
 
 func newStorage(i do.Injector) (*Storage, error) {
