@@ -93,3 +93,23 @@ func (k *WrappedKey) String() string {
 	}
 	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, k.credentialID, k.scope, k.wrapAlgorithm)
 }
+
+func Reconstruct(
+	id WrappedKeyID,
+	userID user.UserID,
+	credentialID credential.CredentialID,
+	scope Scope,
+	wrappedDEK []byte,
+	wrapAlgorithm string,
+	createdAt time.Time,
+) *WrappedKey {
+	return &WrappedKey{
+		id:            id,
+		userID:        userID,
+		credentialID:  credentialID,
+		scope:         scope,
+		wrappedDEK:    wrappedDEK,
+		wrapAlgorithm: wrapAlgorithm,
+		createdAt:     createdAt,
+	}
+}

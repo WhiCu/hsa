@@ -62,6 +62,7 @@ func (i *Invite) CodeHash() string             { return i.codeHash }
 func (i *Invite) ExpiresAt() time.Time         { return i.expiresAt }
 func (i *Invite) CreatedAt() time.Time         { return i.createdAt }
 func (i *Invite) UsedBy() *user.UserID         { return i.usedBy }
+func (i *Invite) UsedAt() *time.Time           { return i.usedAt }
 func (i *Invite) IsExpired(now time.Time) bool { return now.After(i.expiresAt) }
 func (i *Invite) IsUsed() bool                 { return i.usedAt != nil && i.usedBy != nil }
 
@@ -91,6 +92,6 @@ func (i *Invite) String() string {
 	return fmt.Sprintf("Invite{id: %v, createdBy: %v, codeHash: ***REDACTED***, usedBy: %v, expiresAt: %v, createdAt: %v}", i.id, i.createdBy, usedByStr, i.expiresAt, i.createdAt)
 }
 
-func Reconstruct(id InviteID, createdBy user.UserID, codeHash string, usedBy *user.UserID, expiresAt, createdAt time.Time) *Invite {
-	return &Invite{id: id, createdBy: createdBy, codeHash: codeHash, usedBy: usedBy, expiresAt: expiresAt, createdAt: createdAt}
+func Reconstruct(id InviteID, createdBy user.UserID, codeHash string, usedBy *user.UserID, usedAt *time.Time, expiresAt, createdAt time.Time) *Invite {
+	return &Invite{id: id, createdBy: createdBy, codeHash: codeHash, usedBy: usedBy, usedAt: usedAt, expiresAt: expiresAt, createdAt: createdAt}
 }
