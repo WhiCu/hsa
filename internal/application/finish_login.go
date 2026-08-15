@@ -92,6 +92,7 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 		extIDStr = hex.EncodeToString(result.ExternalID)
 	)
 
+	cloneDetected := false
 	err = uc.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
 		cred, txErr := uc.credentials.FindByExternalID(ctx, result.ExternalID)
 		if txErr != nil {
@@ -109,6 +110,7 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 
 		signErr := cred.SetSignCount(result.NewSignCount)
 		if result.CloneWarning || errors.Is(signErr, credential.ErrSignCountRegression) {
+			cloneDetected = true
 			uc.log.WarnContext(ctx, "cloned credential detected, revoking key and sessions",
 				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Bool("security", true))
 
@@ -123,7 +125,7 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 					slog.String("user_id", cred.UserID().String()), slog.Any("error", revokeErr))
 				return revokeErr
 			}
-			return ErrCredentialCloneSuspected
+			return nil
 		}
 
 		if signErr != nil {
@@ -153,6 +155,10 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 	if err != nil {
 		uc.log.ErrorContext(ctx, "login transaction failed", slog.String("external_id", extIDStr), slog.Any("error", err))
 		return nil, err
+	}
+
+	if cloneDetected {
+		return nil, ErrCredentialCloneSuspected
 	}
 
 	uc.log.InfoContext(ctx, "login successfully finished", slog.String("user_id", userID.String()), slog.String("external_id", extIDStr))

@@ -21,7 +21,7 @@ func (r *WrappedKeyRepository) Save(ctx context.Context, keys ...*key.WrappedKey
 		params = append(params, pg.SaveWrappedKeysParams{
 			ID:            k.ID(),
 			UserID:        k.UserID(),
-			CredentialID:  ptrToNullUUID(k.CredentialID()),
+			CredentialID:  k.CredentialID(),
 			Scope:         scopeToPG(k.Scope()),
 			WrappedDek:    k.WrappedDEK(),
 			WrapAlgorithm: k.WrapAlgorithm(),

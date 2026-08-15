@@ -13,9 +13,10 @@ import (
 )
 
 const countActiveInvitesByUser = `-- name: CountActiveInvitesByUser :one
-SELECT count(*) FROM invites
+SELECT count(*)
+FROM invites
 WHERE created_by = $1
-  AND used_by IS NULL
+  AND used_at IS NULL
   AND expires_at > $2
 `
 
@@ -32,7 +33,9 @@ func (q *Queries) CountActiveInvitesByUser(ctx context.Context, arg CountActiveI
 }
 
 const findCredentialByExternalID = `-- name: FindCredentialByExternalID :one
-SELECT id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at FROM credentials WHERE external_id = $1
+SELECT id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at
+FROM credentials
+WHERE external_id = $1
 `
 
 func (q *Queries) FindCredentialByExternalID(ctx context.Context, externalID []byte) (Credential, error) {
@@ -51,8 +54,33 @@ func (q *Queries) FindCredentialByExternalID(ctx context.Context, externalID []b
 	return i, err
 }
 
+const findCredentialByExternalIDForUpdate = `-- name: FindCredentialByExternalIDForUpdate :one
+SELECT id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at
+FROM credentials
+WHERE external_id = $1
+FOR UPDATE
+`
+
+func (q *Queries) FindCredentialByExternalIDForUpdate(ctx context.Context, externalID []byte) (Credential, error) {
+	row := q.db.QueryRow(ctx, findCredentialByExternalIDForUpdate, externalID)
+	var i Credential
+	err := row.Scan(
+		&i.ID,
+		&i.ExternalID,
+		&i.UserID,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const findInviteByCodeHash = `-- name: FindInviteByCodeHash :one
-SELECT id, created_by, code_hash, used_by, expires_at, created_at FROM invites WHERE code_hash = $1
+SELECT id, created_by, code_hash, used_by, used_at, expires_at, created_at
+FROM invites
+WHERE code_hash = $1
 `
 
 func (q *Queries) FindInviteByCodeHash(ctx context.Context, codeHash string) (Invite, error) {
@@ -63,6 +91,7 @@ func (q *Queries) FindInviteByCodeHash(ctx context.Context, codeHash string) (In
 		&i.CreatedBy,
 		&i.CodeHash,
 		&i.UsedBy,
+		&i.UsedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
@@ -70,7 +99,10 @@ func (q *Queries) FindInviteByCodeHash(ctx context.Context, codeHash string) (In
 }
 
 const findInviteByIDForUpdate = `-- name: FindInviteByIDForUpdate :one
-SELECT id, created_by, code_hash, used_by, expires_at, created_at FROM invites WHERE id = $1 FOR UPDATE
+SELECT id, created_by, code_hash, used_by, used_at, expires_at, created_at
+FROM invites
+WHERE id = $1
+FOR UPDATE
 `
 
 func (q *Queries) FindInviteByIDForUpdate(ctx context.Context, id uuid.UUID) (Invite, error) {
@@ -81,6 +113,7 @@ func (q *Queries) FindInviteByIDForUpdate(ctx context.Context, id uuid.UUID) (In
 		&i.CreatedBy,
 		&i.CodeHash,
 		&i.UsedBy,
+		&i.UsedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
@@ -88,7 +121,9 @@ func (q *Queries) FindInviteByIDForUpdate(ctx context.Context, id uuid.UUID) (In
 }
 
 const findRefreshTokenByTokenHash = `-- name: FindRefreshTokenByTokenHash :one
-SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at FROM refresh_tokens WHERE token_hash = $1
+SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
+FROM refresh_tokens
+WHERE token_hash = $1
 `
 
 func (q *Queries) FindRefreshTokenByTokenHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
@@ -107,8 +142,32 @@ func (q *Queries) FindRefreshTokenByTokenHash(ctx context.Context, tokenHash str
 	return i, err
 }
 
+const findRefreshTokenByTokenHashForUpdate = `-- name: FindRefreshTokenByTokenHashForUpdate :one
+SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
+FROM refresh_tokens
+WHERE token_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) FindRefreshTokenByTokenHashForUpdate(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, findRefreshTokenByTokenHashForUpdate, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.IpAddress,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listActiveRefreshTokensByUserIDs = `-- name: ListActiveRefreshTokensByUserIDs :many
-SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at FROM refresh_tokens
+SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
+FROM refresh_tokens
 WHERE user_id = ANY($1::uuid[])
   AND revoked_at IS NULL
   AND expires_at > $2
@@ -149,7 +208,10 @@ func (q *Queries) ListActiveRefreshTokensByUserIDs(ctx context.Context, arg List
 }
 
 const listCredentialsByUserID = `-- name: ListCredentialsByUserID :many
-SELECT id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at FROM credentials WHERE user_id = $1 ORDER BY created_at
+SELECT id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at
+FROM credentials
+WHERE user_id = $1
+ORDER BY created_at
 `
 
 func (q *Queries) ListCredentialsByUserID(ctx context.Context, userID uuid.UUID) ([]Credential, error) {
@@ -183,12 +245,19 @@ func (q *Queries) ListCredentialsByUserID(ctx context.Context, userID uuid.UUID)
 
 const listDescendantUserIDs = `-- name: ListDescendantUserIDs :many
 WITH RECURSIVE compromised_chain AS (
-    SELECT users.id FROM users WHERE users.id = $1
+    SELECT users.id
+    FROM users
+    WHERE users.id = $1
+
     UNION ALL
-    SELECT u.id FROM users u
-    JOIN compromised_chain cc ON u.invited_by = cc.id
+
+    SELECT u.id
+    FROM users u
+    JOIN compromised_chain cc
+        ON u.invited_by = cc.id
 )
-SELECT cc.id FROM compromised_chain cc
+SELECT cc.id
+FROM compromised_chain cc
 `
 
 func (q *Queries) ListDescendantUserIDs(ctx context.Context, root uuid.UUID) ([]uuid.UUID, error) {
@@ -211,21 +280,41 @@ func (q *Queries) ListDescendantUserIDs(ctx context.Context, root uuid.UUID) ([]
 	return items, nil
 }
 
-const lockUserForInviteCreation = `-- name: LockUserForInviteCreation :exec
-SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+const lockUserByID = `-- name: LockUserByID :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended($1::text, 0)
+)
 `
 
-func (q *Queries) LockUserForInviteCreation(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, lockUserForInviteCreation, userID)
+func (q *Queries) LockUserByID(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockUserByID, userID)
 	return err
 }
 
 const saveCredential = `-- name: SaveCredential :exec
-INSERT INTO credentials (id, external_id, user_id, public_key, sign_count, transports, created_at, revoked_at)
-VALUES ($1, $2, $3, $4,
-        $5, $6, $7, $8)
+INSERT INTO credentials (
+    id,
+    external_id,
+    user_id,
+    public_key,
+    sign_count,
+    transports,
+    created_at,
+    revoked_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
 ON CONFLICT (id) DO UPDATE
-SET sign_count = EXCLUDED.sign_count,
+SET
+    sign_count = EXCLUDED.sign_count,
     revoked_at = EXCLUDED.revoked_at
 `
 
@@ -255,11 +344,28 @@ func (q *Queries) SaveCredential(ctx context.Context, arg SaveCredentialParams) 
 }
 
 const saveInvite = `-- name: SaveInvite :exec
-INSERT INTO invites (id, created_by, code_hash, used_by, expires_at, created_at)
-VALUES ($1, $2, $3, $4,
-        $5, $6)
+INSERT INTO invites (
+    id,
+    created_by,
+    code_hash,
+    used_by,
+    used_at,
+    expires_at,
+    created_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
 ON CONFLICT (id) DO UPDATE
-SET used_by = EXCLUDED.used_by
+SET
+    used_by = EXCLUDED.used_by,
+    used_at = EXCLUDED.used_at
 `
 
 type SaveInviteParams struct {
@@ -267,6 +373,7 @@ type SaveInviteParams struct {
 	CreatedBy uuid.UUID
 	CodeHash  string
 	UsedBy    uuid.NullUUID
+	UsedAt    *time.Time
 	ExpiresAt time.Time
 	CreatedAt time.Time
 }
@@ -277,6 +384,7 @@ func (q *Queries) SaveInvite(ctx context.Context, arg SaveInviteParams) error {
 		arg.CreatedBy,
 		arg.CodeHash,
 		arg.UsedBy,
+		arg.UsedAt,
 		arg.ExpiresAt,
 		arg.CreatedAt,
 	)
@@ -284,8 +392,16 @@ func (q *Queries) SaveInvite(ctx context.Context, arg SaveInviteParams) error {
 }
 
 const saveUser = `-- name: SaveUser :exec
-INSERT INTO users (id, invited_by, created_at)
-VALUES ($1, $2, $3)
+INSERT INTO users (
+    id,
+    invited_by,
+    created_at
+)
+VALUES (
+    $1,
+    $2,
+    $3
+)
 `
 
 type SaveUserParams struct {
@@ -302,7 +418,7 @@ func (q *Queries) SaveUser(ctx context.Context, arg SaveUserParams) error {
 type SaveWrappedKeysParams struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
-	CredentialID  uuid.NullUUID
+	CredentialID  uuid.UUID
 	Scope         WrappedKeyScope
 	WrappedDek    []byte
 	WrapAlgorithm string

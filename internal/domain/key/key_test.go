@@ -8,8 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 	"pgregory.net/rapid"
 
-	"github.com/whicu/hsa/internal/domain"
-	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/domain/user"
 )
@@ -54,11 +52,11 @@ var _ = Describe("WrappedKey", func() {
 
 	Context("Constructor validation", func() {
 		DescribeTable("Invalid creation parameters",
-			func(id key.WrappedKeyID, uID user.UserID, scope key.Scope, dek []byte, alg string, expectedErr error) {
+			func(id uuid.UUID, uID uuid.UUID, scope key.Scope, dek []byte, alg string, expectedErr error) {
 				cID := uuid.New()
-				wk, err := key.New(id, uID, &cID, scope, dek, alg, time.Now())
+				wk, err := key.New(id, uID, cID, scope, dek, alg, time.Now())
+
 				Expect(wk).To(BeNil())
-				Expect(err).To(MatchError(domain.ErrValidation))
 				Expect(err).To(MatchError(expectedErr))
 			},
 
@@ -73,7 +71,7 @@ var _ = Describe("WrappedKey", func() {
 	Context("Property-Based Testing", func() {
 		It("should redact sensitive fields in String()", func() {
 			cID := uuid.New()
-			wk, err := key.New(uuid.New(), uuid.New(), &cID, key.ScopeMain, []byte("super-secret-dek"), "AES-256-GCM", time.Now())
+			wk, err := key.New(uuid.New(), uuid.New(), cID, key.ScopeMain, []byte("super-secret-dek"), "AES-256-GCM", time.Now())
 			Expect(err).NotTo(HaveOccurred())
 
 			str := wk.String()
@@ -84,30 +82,19 @@ var _ = Describe("WrappedKey", func() {
 			Expect(nilKey.String()).To(Equal("<nil>"))
 		})
 
-		It("should handle nil credentialID in String()", func() {
-			wk, err := key.New(uuid.New(), uuid.New(), nil, key.ScopeMain, []byte("super-secret-dek"), "AES-256-GCM", time.Now())
-			Expect(err).NotTo(HaveOccurred())
-
-			str := wk.String()
-			Expect(str).To(ContainSubstring("credentialID: <nil>"))
-		})
-
 		It("should construct valid keys for any valid parameter combination", func() {
 			rapid.Check(GinkgoT(), func(t *rapid.T) {
 				id := genValidUUID().Draw(t, "id")
 				userID := genValidUUID().Draw(t, "userID")
 
-				var credID *credential.CredentialID
-				if rapid.Bool().Draw(t, "hasCredID") {
-					cid := genValidUUID().Draw(t, "credID")
-					credID = &cid
-				}
+				credID := genValidUUID().Draw(t, "credID")
 
 				scope := rapid.SampledFrom([]key.Scope{key.ScopeMain, key.ScopeDecoy}).Draw(t, "scope")
 				dek := rapid.SliceOfN(rapid.Byte(), 16, 64).Draw(t, "dek")
 				alg := rapid.StringMatching(`[A-Z0-9\-]{3,10}`).Draw(t, "alg")
 
 				wk, err := key.New(id, userID, credID, scope, dek, alg, time.Now())
+
 				Expect(err).NotTo(HaveOccurred())
 				Expect(wk.ID()).To(Equal(id))
 				Expect(wk.Scope()).To(Equal(scope))

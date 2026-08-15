@@ -21,11 +21,19 @@ var (
 
 const saveRefreshTokens = `-- name: SaveRefreshTokens :batchexec
 INSERT INTO refresh_tokens (
-    id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
+    id,
+    user_id,
+    token_hash,
+    device_info,
+    ip_address,
+    expires_at,
+    revoked_at,
+    created_at
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE
-SET revoked_at = EXCLUDED.revoked_at
+SET
+    revoked_at = EXCLUDED.revoked_at
 `
 
 type SaveRefreshTokensBatchResults struct {

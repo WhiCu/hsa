@@ -71,6 +71,7 @@ type Invite struct {
 	CreatedBy uuid.UUID
 	CodeHash  string
 	UsedBy    uuid.NullUUID
+	UsedAt    *time.Time
 	ExpiresAt time.Time
 	CreatedAt time.Time
 }
@@ -95,7 +96,7 @@ type User struct {
 type WrappedKey struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
-	CredentialID  uuid.NullUUID
+	CredentialID  uuid.UUID
 	Scope         WrappedKeyScope
 	WrappedDek    []byte
 	WrapAlgorithm string

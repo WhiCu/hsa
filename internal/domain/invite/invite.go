@@ -25,6 +25,7 @@ type Invite struct {
 	createdBy user.UserID
 	codeHash  string
 	usedBy    *user.UserID
+	usedAt    *time.Time
 	expiresAt time.Time
 	createdAt time.Time
 }
@@ -62,7 +63,7 @@ func (i *Invite) ExpiresAt() time.Time         { return i.expiresAt }
 func (i *Invite) CreatedAt() time.Time         { return i.createdAt }
 func (i *Invite) UsedBy() *user.UserID         { return i.usedBy }
 func (i *Invite) IsExpired(now time.Time) bool { return now.After(i.expiresAt) }
-func (i *Invite) IsUsed() bool                 { return i.usedBy != nil }
+func (i *Invite) IsUsed() bool                 { return i.usedAt != nil && i.usedBy != nil }
 
 func (i *Invite) Redeem(by user.UserID, now time.Time) error {
 	if i.IsUsed() {
@@ -71,7 +72,10 @@ func (i *Invite) Redeem(by user.UserID, now time.Time) error {
 	if i.IsExpired(now) {
 		return ErrExpired
 	}
+
 	i.usedBy = &by
+	i.usedAt = &now
+
 	return nil
 }
 

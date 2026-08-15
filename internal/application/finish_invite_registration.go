@@ -245,7 +245,7 @@ func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context,
 func (ig *FinishInviteRegistration) saveWrappedKeys(ctx context.Context, userID user.UserID, credID credential.CredentialID, keyInputs []WrappedKeyInput, now time.Time) error {
 	wrapped := make([]*key.WrappedKey, 0, len(keyInputs))
 	for _, wk := range keyInputs {
-		k, kErr := key.New(ig.ids.NewID(), userID, &credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
+		k, kErr := key.New(ig.ids.NewID(), userID, credID, wk.Scope, wk.WrappedDEK, wk.WrapAlgorithm, now)
 		if kErr != nil {
 			ig.log.ErrorContext(ctx, "failed to create wrapped key domain entity", slog.String("user_id", userID.String()), slog.Any("error", kErr))
 			return kErr

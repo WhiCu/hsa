@@ -1,16 +1,18 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE users (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    invited_by  UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_users_invited_by ON users (invited_by);
+CREATE INDEX idx_users_invited_by
+    ON users (invited_by);
 
 CREATE UNIQUE INDEX idx_users_single_root
     ON users ((invited_by IS NULL))
     WHERE invited_by IS NULL;
+
 
 CREATE TABLE credentials (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,22 +25,30 @@ CREATE TABLE credentials (
     revoked_at   TIMESTAMPTZ
 );
 
-CREATE UNIQUE INDEX idx_credentials_external_id ON credentials (external_id);
-CREATE INDEX idx_credentials_user_id ON credentials (user_id);
+CREATE UNIQUE INDEX idx_credentials_external_id
+    ON credentials (external_id);
+
+CREATE INDEX idx_credentials_user_id
+    ON credentials (user_id);
+
 
 CREATE TABLE invites (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    code_hash   TEXT NOT NULL,
-    used_by     UUID REFERENCES users(id) ON DELETE SET NULL,
-    expires_at  TIMESTAMPTZ NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash  TEXT NOT NULL,
+    used_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+    used_at    TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX idx_invites_code_hash ON invites (code_hash);
+CREATE UNIQUE INDEX idx_invites_code_hash
+    ON invites (code_hash);
 
-CREATE INDEX idx_invites_created_by_unused ON invites (created_by)
-    WHERE used_by IS NULL;
+CREATE INDEX idx_invites_created_by_active
+    ON invites (created_by, expires_at)
+    WHERE used_at IS NULL;
+
 
 CREATE TABLE refresh_tokens (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -51,25 +61,31 @@ CREATE TABLE refresh_tokens (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX idx_refresh_tokens_token_hash ON refresh_tokens (token_hash);
+CREATE UNIQUE INDEX idx_refresh_tokens_token_hash
+    ON refresh_tokens (token_hash);
 
-CREATE INDEX idx_refresh_tokens_user_active ON refresh_tokens (user_id)
+CREATE INDEX idx_refresh_tokens_user_active
+    ON refresh_tokens (user_id, expires_at)
     WHERE revoked_at IS NULL;
+
 
 CREATE TYPE wrapped_key_scope AS ENUM ('main', 'decoy');
 
 CREATE TABLE wrapped_keys (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    credential_id  UUID REFERENCES credentials(id) ON DELETE CASCADE,
-    scope          wrapped_key_scope NOT NULL,
-    wrapped_dek    BYTEA NOT NULL,
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    credential_id UUID NOT NULL REFERENCES credentials(id) ON DELETE CASCADE,
+    scope         wrapped_key_scope NOT NULL,
+    wrapped_dek   BYTEA NOT NULL,
     wrap_algorithm TEXT NOT NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_wrapped_keys_user_id ON wrapped_keys (user_id);
-CREATE INDEX idx_wrapped_keys_credential_id ON wrapped_keys (credential_id);
+CREATE INDEX idx_wrapped_keys_user_id
+    ON wrapped_keys (user_id);
+
+CREATE INDEX idx_wrapped_keys_credential_id
+    ON wrapped_keys (credential_id);
 
 CREATE UNIQUE INDEX idx_wrapped_keys_credential_scope
     ON wrapped_keys (credential_id, scope);

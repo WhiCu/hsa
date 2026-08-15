@@ -32,7 +32,7 @@ func (s Scope) Valid() bool { return s == ScopeMain || s == ScopeDecoy }
 type WrappedKey struct {
 	id            WrappedKeyID
 	userID        user.UserID
-	credentialID  *credential.CredentialID
+	credentialID  credential.CredentialID
 	scope         Scope
 	wrappedDEK    []byte
 	wrapAlgorithm string
@@ -42,7 +42,7 @@ type WrappedKey struct {
 func New(
 	id WrappedKeyID,
 	userID user.UserID,
-	credentialID *credential.CredentialID,
+	credentialID credential.CredentialID,
 	scope Scope,
 	wrappedDEK []byte,
 	wrapAlgorithm string,
@@ -57,6 +57,9 @@ func New(
 		return nil, ErrIDRequired
 	}
 	if userID == uuid.Nil {
+		return nil, user.ErrIDRequired
+	}
+	if credentialID == uuid.Nil {
 		return nil, user.ErrIDRequired
 	}
 	if !scope.Valid() {
@@ -75,22 +78,18 @@ func New(
 	}, nil
 }
 
-func (k *WrappedKey) ID() WrappedKeyID                       { return k.id }
-func (k *WrappedKey) UserID() user.UserID                    { return k.userID }
-func (k *WrappedKey) Scope() Scope                           { return k.scope }
-func (k *WrappedKey) CredentialID() *credential.CredentialID { return k.credentialID }
-func (k *WrappedKey) WrappedDEK() []byte                     { return k.wrappedDEK }
-func (k *WrappedKey) WrapAlgorithm() string                  { return k.wrapAlgorithm }
-func (k *WrappedKey) CreatedAt() time.Time                   { return k.createdAt }
+func (k *WrappedKey) ID() WrappedKeyID                      { return k.id }
+func (k *WrappedKey) UserID() user.UserID                   { return k.userID }
+func (k *WrappedKey) Scope() Scope                          { return k.scope }
+func (k *WrappedKey) CredentialID() credential.CredentialID { return k.credentialID }
+func (k *WrappedKey) WrappedDEK() []byte                    { return k.wrappedDEK }
+func (k *WrappedKey) WrapAlgorithm() string                 { return k.wrapAlgorithm }
+func (k *WrappedKey) CreatedAt() time.Time                  { return k.createdAt }
 
 // SECURITY: never log this field
 func (k *WrappedKey) String() string {
 	if k == nil {
 		return "<nil>"
 	}
-	credID := "<nil>"
-	if k.credentialID != nil {
-		credID = k.credentialID.String()
-	}
-	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, credID, k.scope, k.wrapAlgorithm)
+	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, k.credentialID, k.scope, k.wrapAlgorithm)
 }

@@ -91,11 +91,6 @@ func (ci *CreateInvite) Execute(ctx context.Context, createdBy user.UserID) (cod
 		}
 
 		code, expiresAt = rawCode, inv.ExpiresAt()
-
-		ci.log.InfoContext(ctx, "invite successfully created",
-			slog.String("invite_id", inv.ID().String()),
-			slog.String("created_by", createdBy.String()),
-			slog.Time("expires_at", inv.ExpiresAt()))
 		return nil
 	})
 	if err != nil {

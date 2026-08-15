@@ -57,7 +57,7 @@ func (r *InviteRepository) Save(ctx context.Context, i *invite.Invite) error {
 func (r *InviteRepository) CountActiveByUser(ctx context.Context, userID user.UserID, now time.Time) (int, error) {
 	q := r.storage.GetQueries(ctx)
 
-	if err := q.LockUserForInviteCreation(ctx, userID.String()); err != nil {
+	if err := q.LockUserByID(ctx, userID.String()); err != nil {
 		return 0, err
 	}
 
