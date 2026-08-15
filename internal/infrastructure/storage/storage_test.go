@@ -71,6 +71,10 @@ var _ = Describe("Storage", func() {
 		var err error
 		srg, err = do.Invoke[*storage.Storage](injector)
 		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(func(_ SpecContext) {
+			rep := injector.Shutdown()
+			Expect(rep.Succeed).To(BeTrue())
+		})
 	})
 
 	Describe("Ping", func() {

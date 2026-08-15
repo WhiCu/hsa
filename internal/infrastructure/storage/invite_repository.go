@@ -49,6 +49,7 @@ func (r *InviteRepository) Save(ctx context.Context, i *invite.Invite) error {
 		CreatedBy: i.CreatedBy(),
 		CodeHash:  i.CodeHash(),
 		UsedBy:    ptrToNullUUID(i.UsedBy()),
+		UsedAt:    i.UsedAt(),
 		ExpiresAt: i.ExpiresAt(),
 		CreatedAt: i.CreatedAt(),
 	})
@@ -73,7 +74,12 @@ func (r *InviteRepository) CountActiveByUser(ctx context.Context, userID user.Us
 
 func rowToInvite(row pg.Invite) *invite.Invite {
 	return invite.Reconstruct(
-		row.ID, row.CreatedBy, row.CodeHash,
-		nullUUIDToPtr(row.UsedBy), row.ExpiresAt, row.CreatedAt,
+		row.ID,
+		row.CreatedBy,
+		row.CodeHash,
+		nullUUIDToPtr(row.UsedBy),
+		row.UsedAt,
+		row.ExpiresAt,
+		row.CreatedAt,
 	)
 }

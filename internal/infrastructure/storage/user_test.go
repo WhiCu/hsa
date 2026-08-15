@@ -34,6 +34,10 @@ var _ = Describe("UserRepository", func() {
 		var err error
 		st, err = do.Invoke[*storage.Storage](injector)
 		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(func(_ SpecContext) {
+			rep := injector.Shutdown()
+			Expect(rep.Succeed).To(BeTrue())
+		})
 
 		userRepo, err = do.Invoke[*storage.UserRepository](injector)
 		Expect(err).ToNot(HaveOccurred())
