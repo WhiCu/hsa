@@ -12,31 +12,12 @@ import (
 
 	"github.com/whicu/hsa/internal/infrastructure/storage"
 	"github.com/whicu/hsa/pkg/logger"
-)
-
-const (
-	testDBName = "test_db"
-	testDBUser = "test_user"
-	testDBPass = "test_password"
+	"github.com/whicu/hsa/test/testutil"
 )
 
 var (
 	globalConfig storage.Config
 )
-
-func StartPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, error) {
-	ctr, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase(testDBName),
-		postgres.WithUsername(testDBUser),
-		postgres.WithPassword(testDBPass),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("start postgres container: %w", err)
-	}
-	return ctr, nil
-}
 
 func BuildStorageConfig(ctx context.Context, ctr *postgres.PostgresContainer) (storage.Config, error) {
 	host, err := ctr.Host(ctx)
@@ -51,9 +32,9 @@ func BuildStorageConfig(ctx context.Context, ctr *postgres.PostgresContainer) (s
 	return storage.Config{
 		Host:            host,
 		Port:            port.Port(),
-		User:            testDBUser,
-		Pass:            testDBPass,
-		Name:            testDBName,
+		User:            testutil.TestDBUser,
+		Pass:            testutil.TestDBPass,
+		Name:            testutil.TestDBName,
 		Insecure:        true,
 		MaxOpenConns:    10,
 		MaxIdleConns:    2,
@@ -63,7 +44,7 @@ func BuildStorageConfig(ctx context.Context, ctr *postgres.PostgresContainer) (s
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	ctr, err := StartPostgresContainer(ctx)
+	ctr, err := testutil.StartPostgresContainer(ctx)
 	Expect(err).ToNot(HaveOccurred())
 
 	globalConfig, err = BuildStorageConfig(ctx, ctr)

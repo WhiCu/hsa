@@ -46,7 +46,7 @@ func (c Config) DSN() string {
 	u := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(c.User, c.Pass),
-		Host:   c.HostPort(), // Уже есть ваш метод
+		Host:   c.HostPort(),
 		Path:   c.Name,
 	}
 

@@ -83,7 +83,7 @@ func (s *Storage) Ping(ctx context.Context) error {
 }
 
 func (s *Storage) Up(ctx context.Context) error {
-	sqlDB := stdlib.OpenDB(*s.db.Config().ConnConfig)
+	sqlDB := stdlib.OpenDBFromPool(s.db)
 	defer sqlDB.Close()
 
 	if err := migrations.Up(ctx, sqlDB); err != nil {
@@ -94,7 +94,7 @@ func (s *Storage) Up(ctx context.Context) error {
 }
 
 func (s *Storage) Reset(ctx context.Context) error {
-	sqlDB := stdlib.OpenDB(*s.db.Config().ConnConfig)
+	sqlDB := stdlib.OpenDBFromPool(s.db)
 	defer sqlDB.Close()
 
 	if err := migrations.Reset(ctx, sqlDB); err != nil {
