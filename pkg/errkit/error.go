@@ -26,7 +26,9 @@ func Append(err error, errs ...error) *Error {
 				ErrorFormat: target.ErrorFormat,
 			}
 			if target.Errors != nil {
-				newTarget.Errors = make([]error, len(target.Errors))
+				// Pre-allocate capacity to avoid multiple allocations when appending errs.
+				// This assumes errs will be appended directly, which is true for most cases.
+				newTarget.Errors = make([]error, len(target.Errors), len(target.Errors)+len(errs))
 				copy(newTarget.Errors, target.Errors)
 			}
 		}
