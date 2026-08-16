@@ -3,9 +3,9 @@ package migrations
 import (
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/jackc/pgx/v5"
 )
 
 var _ = Describe("Migrations SQL Injection Safe Reset", func() {
