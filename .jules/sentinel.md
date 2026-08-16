@@ -18,3 +18,9 @@
 **Vulnerability:** The webauthn challenge session payloads (`challengePayload` and `loginChallengePayload` which embed `gowebauthn.SessionData`) did not have custom `String()` methods. `gowebauthn.SessionData` contains `Challenge` and `UserID` arrays. If these wrappers were inadvertently logged (e.g. using `%+v`), the underlying webauthn challenges would leak.
 **Learning:** Structures handling authentication flows, even those bridging third-party webauthn structs in infrastructure adapters, must implement redaction to prevent accidental exposure via logging.
 **Prevention:** Ensure that all infrastructure payloads handling Webauthn session data explicitly implement a `fmt.Stringer` interface implementation with sensitive fields labeled `***REDACTED***` and marked with `// SECURITY: never log this field`.
+
+## 2023-10-24 - PostgreSQL SQL Injection via fmt.Sprintf
+
+**Vulnerability:** Constructing PostgreSQL table truncate queries using `fmt.Sprintf("TRUNCATE TABLE %s", fmt.Sprintf("%q", tableName))` creates an SQL Injection vulnerability because `%q` escapes characters differently than PostgreSQL identifier quoting rules (PostgreSQL requires doubling inner double-quotes `""`).
+**Learning:** Never use `fmt` formatting to escape database identifiers.
+**Prevention:** Use standard library parameterization where possible. When dealing with DDL (which cannot be parameterized), rely on database-specific libraries like `github.com/jackc/pgx/v5` and explicitly call `pgx.Identifier{name}.Sanitize()`.
