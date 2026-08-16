@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pressly/goose/v3"
 )
 
@@ -49,7 +50,7 @@ func Reset(ctx context.Context, db *sql.DB) error {
 		if errScan := rows.Scan(&tableName); errScan != nil {
 			return fmt.Errorf("scan table name for truncate: %w", errScan)
 		}
-		tables = append(tables, fmt.Sprintf("%q", tableName))
+		tables = append(tables, pgx.Identifier{tableName}.Sanitize())
 	}
 
 	if errScan := rows.Err(); errScan != nil {
@@ -60,7 +61,7 @@ func Reset(ctx context.Context, db *sql.DB) error {
 		return nil
 	}
 
-	truncateQuery := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE;", strings.Join(tables, ", "))
+	truncateQuery := "TRUNCATE TABLE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE;"
 	if _, errExec := db.ExecContext(ctx, truncateQuery); errExec != nil {
 		return fmt.Errorf("execute dynamic truncate: %w", errExec)
 	}
