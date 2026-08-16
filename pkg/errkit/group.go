@@ -22,6 +22,11 @@ func (g *Group) Add(err error) {
 
 func (g *Group) Go(f func() error) {
 	g.wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				g.Add(NewPanicError(r))
+			}
+		}()
 		if err := f(); err != nil {
 			g.Add(err)
 		}
@@ -42,9 +47,16 @@ func (g *Group) Wait() error {
 	g.finally = nil
 	g.mutex.Unlock()
 	for _, f := range funcs {
-		if err := f(); err != nil {
-			g.Add(err)
-		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					g.Add(NewPanicError(r))
+				}
+			}()
+			if err := f(); err != nil {
+				g.Add(err)
+			}
+		}()
 	}
 
 	g.mutex.Lock()
