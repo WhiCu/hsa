@@ -1,40 +1,67 @@
 package idgen
 
 import (
-	"context"
+	"crypto/rand"
+	"io"
+	"sync"
+	"unsafe"
 
 	"github.com/google/uuid"
 )
 
-type pooledGenerator struct {
-	pool chan uuid.UUID
+const batchSize = 256 // 256 * 16 = 4096
+
+type batchBuffer struct {
+	uuids [batchSize]uuid.UUID
+	idx   int
 }
 
-func NewPooledGenerator(ctx context.Context, poolSize int) *pooledGenerator {
-	g := &pooledGenerator{
-		pool: make(chan uuid.UUID, poolSize),
+func (b *batchBuffer) refill() error {
+	raw := unsafe.Slice((*byte)(unsafe.Pointer(&b.uuids[0])), batchSize*16)
+	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+		return err
 	}
 
-	go g.worker(ctx)
+	for i := range batchSize {
+		b.uuids[i][6] = (b.uuids[i][6] & 0x0f) | 0x40 // RFC 4122 Version 4
+		b.uuids[i][8] = (b.uuids[i][8] & 0x3f) | 0x80 // RFC 4122 Variant
+	}
 
+	b.idx = 0
+	return nil
+}
+
+type PooledGenerator struct {
+	pool sync.Pool
+}
+
+func NewPooledGenerator() *PooledGenerator {
+	g := &PooledGenerator{
+		pool: sync.Pool{
+			New: func() any {
+				return &batchBuffer{idx: batchSize}
+			},
+		},
+	}
 	return g
 }
 
-func (g *pooledGenerator) worker(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case g.pool <- uuid.New():
-		}
-	}
-}
-
-func (g *pooledGenerator) NewID() uuid.UUID {
-	select {
-	case id := <-g.pool:
-		return id
-	default:
+func (g *PooledGenerator) NewID() uuid.UUID {
+	buf, ok := g.pool.Get().(*batchBuffer)
+	if !ok {
 		return uuid.New()
 	}
+
+	if buf.idx >= batchSize {
+		if err := buf.refill(); err != nil {
+			g.pool.Put(buf)
+			return uuid.New()
+		}
+	}
+
+	id := buf.uuids[buf.idx]
+	buf.idx++
+
+	g.pool.Put(buf)
+	return id
 }
