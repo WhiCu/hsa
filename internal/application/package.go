@@ -340,6 +340,30 @@ func newRevokeCompromisedChain(i do.Injector) (*RevokeCompromisedChain, error) {
 	return NewRevokeCompromisedChain(log, descendants, revokeUser), nil
 }
 
+func newBootstrapRoot(i do.Injector) (*BootstrapRoot, error) {
+	log, err := do.Invoke[*slog.Logger](i)
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := do.InvokeAs[UserSaver](i)
+	if err != nil {
+		return nil, err
+	}
+
+	finder, err := do.InvokeAs[RootFinder](i)
+	if err != nil {
+		return nil, err
+	}
+
+	ids, err := do.InvokeAs[IDGenerator](i)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBootstrapRoot(log, users, finder, ids), nil
+}
+
 var Package = do.Package(
 	do.Lazy(newConfig),
 	do.Lazy(newCreateInvite),
@@ -351,4 +375,5 @@ var Package = do.Package(
 	do.Lazy(newRefreshAccessToken),
 	do.Lazy(newRevokeAllUserSessions),
 	do.Lazy(newRevokeCompromisedChain),
+	do.Lazy(newBootstrapRoot),
 )
