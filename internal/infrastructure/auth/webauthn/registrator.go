@@ -29,11 +29,6 @@ type challengePayload struct {
 	UserID      user.UserID            `json:"user_id"`
 }
 
-// SECURITY: never log this field
-func (p challengePayload) String() string {
-	return "challengePayload{SessionData: ***REDACTED***, InviteID: " + p.InviteID.String() + ", UserID: " + p.UserID.String() + "}"
-}
-
 type webauthnUser struct {
 	id          user.UserID
 	credentials []gowebauthn.Credential
