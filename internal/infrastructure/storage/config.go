@@ -20,7 +20,7 @@ type Config struct {
 	Insecure bool `koanf:"insecure"`
 
 	MaxOpenConns int32 `koanf:"max_open_conns" validate:"required,gt=0"`
-	MaxIdleConns int32 `koanf:"max_idle_conns" validate:"required,gt=0,lte=MaxOpenConns"`
+	MaxIdleConns int32 `koanf:"max_idle_conns" validate:"required,gt=0,ltefield=MaxOpenConns"`
 
 	ConnMaxLifetime time.Duration `koanf:"conn_max_lifetime" validate:"required,gt=0"`
 	ConnMaxIdleTime time.Duration `koanf:"conn_max_idle_time" validate:"required,gt=0"`

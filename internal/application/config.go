@@ -25,6 +25,8 @@ var defaultCfg = Config{
 	Invite: InviteConfig{
 		MaxActive: 3,
 		TTL:       72 * time.Hour,
+
+		MaxWrappedKey: 10,
 	},
 	Session: SessionConfig{
 		RefreshTTL: 30 * 24 * time.Hour,
