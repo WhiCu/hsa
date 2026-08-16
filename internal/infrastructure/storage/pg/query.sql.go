@@ -165,6 +165,17 @@ func (q *Queries) FindRefreshTokenByTokenHashForUpdate(ctx context.Context, toke
 	return i, err
 }
 
+const findRootUser = `-- name: FindRootUser :one
+SELECT id, invited_by, created_at FROM users WHERE invited_by IS NULL LIMIT 1
+`
+
+func (q *Queries) FindRootUser(ctx context.Context) (User, error) {
+	row := q.db.QueryRow(ctx, findRootUser)
+	var i User
+	err := row.Scan(&i.ID, &i.InvitedBy, &i.CreatedAt)
+	return i, err
+}
+
 const listActiveRefreshTokensByUserIDs = `-- name: ListActiveRefreshTokensByUserIDs :many
 SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
 FROM refresh_tokens

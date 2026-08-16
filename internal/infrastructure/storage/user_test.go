@@ -140,4 +140,33 @@ var _ = Describe("UserRepository", func() {
 			Expect(descendants).To(BeEmpty())
 		})
 	})
+	Describe("FindRoot", func() {
+		It("successfully retrieves the root user when one exists", func(ctx SpecContext) {
+			rootID := uuid.New()
+			now := time.Now().Truncate(time.Microsecond)
+
+			root, err := user.NewRoot(rootID, now)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userRepo.Save(ctx, root)).To(Succeed())
+
+			childID := uuid.New()
+			child, err := user.New(childID, rootID, now)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userRepo.Save(ctx, child)).To(Succeed())
+
+			found, err := userRepo.FindRoot(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).ToNot(BeNil())
+
+			Expect(found.ID()).To(Equal(rootID))
+			Expect(found.InvitedBy()).To(BeNil())
+			Expect(found.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
+		})
+
+		It("returns domain.ErrNotFound when no root user exists in the database", func(ctx SpecContext) {
+			found, err := userRepo.FindRoot(ctx)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(found).To(BeNil())
+		})
+	})
 })

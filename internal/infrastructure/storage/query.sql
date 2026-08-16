@@ -10,6 +10,9 @@ VALUES (
     sqlc.arg(created_at)
 );
 
+-- name: FindRootUser :one
+SELECT * FROM users WHERE invited_by IS NULL LIMIT 1;
+
 
 -- name: ListDescendantUserIDs :many
 WITH RECURSIVE compromised_chain AS (

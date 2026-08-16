@@ -107,3 +107,6 @@ func (s *Storage) Reset(ctx context.Context) error {
 func (s *Storage) Shutdown() {
 	s.db.Close()
 }
+func (s *Storage) HealthCheck(ctx context.Context) error {
+	return s.Ping(ctx)
+}

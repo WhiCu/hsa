@@ -39,3 +39,22 @@ func (r *UserRepository) Descendants(ctx context.Context, root user.UserID) ([]u
 	}
 	return ids, nil
 }
+
+func (r *UserRepository) FindRoot(ctx context.Context) (*user.User, error) {
+	row, err := r.storage.GetQueries(ctx).FindRootUser(ctx)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	return rowToUser(row), nil
+}
+
+func rowToUser(row pg.User) *user.User {
+	return user.Reconstruct(
+		row.ID,
+		nullUUIDToPtr(row.InvitedBy),
+		row.CreatedAt,
+	)
+}
