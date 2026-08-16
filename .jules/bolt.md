@@ -1,3 +1,6 @@
 ## 2024-05-18 - [Optimizing HMAC SHA256 in SecretManager]
 **Learning:** HMAC operations in Go `hmac.New(sha256.New, key)` are surprisingly expensive due to allocations and setup time for every invocation. Reusing HMAC instances using `sync.Pool` significantly cuts down execution time and allocations.
 **Action:** Use a `sync.Pool` with `hash.Hash` inside `SecretManager` when multiple HMACs are generated to reduce allocations and speed up hashing operations. Ensure `Reset()` is called on the retrieved hash object before use.
+## 2026-08-16 - [Avoiding premature optimization on cold paths]
+**Learning:** Even obvious performance wins like strings.Builder vs fmt.Sprintf should be evaluated for their execution frequency. Optimizing code on cold paths (like database reset functions that only run in test setups) violates the strict rule against premature optimization without measurable impact, and creates unneeded noise. Error formatting logic in errkit, however, is a very hot path due to widespread error wrapping and logging usage.
+**Action:** Always check the call sites and execution frequency of code being optimized before making changes. Avoid any optimizations on test setup/teardown functions or isolated one-off scripts.
