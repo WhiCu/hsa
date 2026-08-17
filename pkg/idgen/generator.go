@@ -48,6 +48,7 @@ func NewPooledGenerator() *PooledGenerator {
 
 func (g *PooledGenerator) NewID() uuid.UUID {
 	buf, ok := g.pool.Get().(*batchBuffer)
+	// uncovered: defensive sync.Pool assertion, we only put valid *batchBuffers
 	if !ok {
 		return uuid.New()
 	}
