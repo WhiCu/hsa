@@ -14,6 +14,8 @@ import (
 
 const testChallengeToken = "test-challenge-token"
 
+const enabledConst = "enabled"
+
 func newTestWebAuthn(t interface{ Helper() }) *gowebauthn.WebAuthn {
 	t.Helper()
 	wa, err := gowebauthn.New(&gowebauthn.Config{
@@ -83,10 +85,10 @@ var _ = Describe("Registrator", func() {
 
 	It("should return false for missing or invalid prf extension", func() {
 		Expect(parsePRFExtension(nil)).To(BeFalse())
-		Expect(parsePRFExtension(map[string]any{"prf": "not a map"})).To(BeFalse())
-		Expect(parsePRFExtension(map[string]any{"prf": map[string]any{"enabled": "not a bool"}})).To(BeFalse())
-		Expect(parsePRFExtension(map[string]any{"prf": map[string]any{"enabled": false}})).To(BeFalse())
-		Expect(parsePRFExtension(map[string]any{"prf": map[string]any{"enabled": true}})).To(BeTrue())
+		Expect(parsePRFExtension(map[string]any{prfConst: "not a map"})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: "not a bool"}})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: false}})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: true}})).To(BeTrue())
 	})
 
 	It("should handle WebAuthnCredentials and properties correctly", func() {

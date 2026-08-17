@@ -12,6 +12,9 @@ import (
 	"github.com/whicu/hsa/pkg/logger"
 )
 
+const testAppConst = "Test App"
+const testDisplayNameConst = "Test"
+const localhostConst = "localhost"
 var _ = Describe("Package DI", func() {
 	var injector do.Injector
 
@@ -34,7 +37,7 @@ var _ = Describe("Package DI", func() {
 		do.OverrideValue(injector, webauthnadapter.Config{
 			RP: webauthnadapter.RPConfig{
 				ID:          "",
-				DisplayName: "Test App",
+				DisplayName: testAppConst,
 			},
 		})
 		_, err := do.Invoke[*webauthn.WebAuthn](injector)
@@ -59,7 +62,7 @@ var _ = Describe("Package DI", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("invoke webauthn"))
 
-		wa, _ := webauthn.New(&webauthn.Config{RPID: "localhost", RPDisplayName: "Test"})
+		wa, _ := webauthn.New(&webauthn.Config{RPID: localhostConst, RPDisplayName: testAppConst})
 		do.OverrideValue(injector, wa)
 		_, err = do.Invoke[*webauthnadapter.Authenticator](injector)
 		Expect(err).To(HaveOccurred())
@@ -82,7 +85,7 @@ var _ = Describe("Package DI", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("invoke webauthn"))
 
-		wa, _ := webauthn.New(&webauthn.Config{RPID: "localhost", RPDisplayName: "Test"})
+		wa, _ := webauthn.New(&webauthn.Config{RPID: localhostConst, RPDisplayName: testAppConst})
 		do.OverrideValue(injector, wa)
 		_, err = do.Invoke[*webauthnadapter.Registrator](injector)
 		Expect(err).To(HaveOccurred())
@@ -98,7 +101,7 @@ var _ = Describe("Package DI", func() {
 	})
 
 	It("fails to resolve authenticator when config fails in authenticator invoke", func() {
-		wa, _ := webauthn.New(&webauthn.Config{RPID: "localhost", RPDisplayName: "Test"})
+		wa, _ := webauthn.New(&webauthn.Config{RPID: localhostConst, RPDisplayName: testAppConst})
 		do.OverrideValue(injector, wa)
 		codec := mocks.NewChallengeCodec(GinkgoT())
 		do.OverrideValue[webauthnadapter.ChallengeCodec](injector, codec)
@@ -115,7 +118,7 @@ var _ = Describe("Package DI", func() {
 	})
 
 	It("fails to resolve registrator when config fails in registrator invoke", func() {
-		wa, _ := webauthn.New(&webauthn.Config{RPID: "localhost", RPDisplayName: "Test"})
+		wa, _ := webauthn.New(&webauthn.Config{RPID: localhostConst, RPDisplayName: testAppConst})
 		do.OverrideValue(injector, wa)
 		codec := mocks.NewChallengeCodec(GinkgoT())
 		do.OverrideValue[webauthnadapter.ChallengeCodec](injector, codec)

@@ -15,10 +15,11 @@ func TestWebauthn(t *testing.T) {
 }
 
 const testChallengeToken = "test-challenge-token"
+const localhost = "localhost"
 
 var testConfig = webauthnadapter.Config{
 	RP: webauthnadapter.RPConfig{
-		ID:          "localhost",
+		ID:          localhost,
 		DisplayName: "Test App",
 		Origins:     []string{"http://localhost:8080"},
 	},
