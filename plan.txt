@@ -1,9 +1,0 @@
-The CI job "lint" failed with:
-[FAILURE] File: internal/infrastructure/auth/webauthn/struct_strings_internal_test.go, Line: 8
-Message: File is not properly formatted (goimports)
-
-When I removed the unused import `"github.com/whicu/hsa/internal/domain/user"`, I used `sed` to delete the line, but this leaves an empty line or messes up the formatting for `goimports`. I just need to run `goimports` on it.
-
-Plan:
-1. Format `internal/infrastructure/auth/webauthn/struct_strings_internal_test.go` properly using `goimports -w`.
-2. Commit and submit the fix.
