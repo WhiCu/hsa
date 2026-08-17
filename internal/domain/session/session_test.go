@@ -45,17 +45,40 @@ var _ = Describe("RefreshToken Domain", func() {
 		})
 
 		DescribeTable("Invalid initialization",
-			func(id session.RefreshTokenID, uID user.UserID, tokenHash string, expectedErr error) {
-				rt, err := session.New(id, uID, tokenHash, "device", ip, time.Hour, time.Now())
+			func(id session.RefreshTokenID, uID user.UserID, tokenHash string, ipAddr netip.Addr, expectedErr error) {
+				rt, err := session.New(id, uID, tokenHash, "device", ipAddr, time.Hour, time.Now())
 				Expect(rt).To(BeNil())
 				Expect(err).To(MatchError(domain.ErrValidation))
 				Expect(err).To(MatchError(expectedErr))
 			},
 
-			Entry("Nil Session ID", uuid.Nil, uuid.New(), "hash", session.ErrIDRequired),
-			Entry("Nil User ID", uuid.New(), uuid.Nil, "hash", user.ErrIDRequired),
-			Entry("Empty Token Hash", uuid.New(), uuid.New(), "", session.ErrTokenHashRequired),
+			Entry("Nil Session ID", uuid.Nil, uuid.New(), "hash", ip, session.ErrIDRequired),
+			Entry("Nil User ID", uuid.New(), uuid.Nil, "hash", ip, user.ErrIDRequired),
+			Entry("Empty Token Hash", uuid.New(), uuid.New(), "", ip, session.ErrTokenHashRequired),
+			Entry("Invalid IP Address", uuid.New(), uuid.New(), "hash", netip.Addr{}, session.ErrIPAddressRequired),
 		)
+	})
+
+	Context("Getters", func() {
+		It("should return correct values", func() {
+			id := uuid.New()
+			uID := uuid.New()
+			now := time.Now()
+			ttl := time.Hour
+
+			rt, err := session.New(id, uID, "hash", "device", ip, ttl, now)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(rt.ID()).To(Equal(id))
+			Expect(rt.UserID()).To(Equal(uID))
+			Expect(rt.TokenHash()).To(Equal("hash"))
+			Expect(rt.DeviceInfo()).To(Equal("device"))
+			Expect(rt.IPAddress()).To(Equal(ip))
+			Expect(rt.IsRevoked()).To(BeFalse())
+			Expect(rt.ExpiresAt()).To(Equal(now.Add(ttl)))
+			Expect(rt.CreatedAt()).To(Equal(now))
+			Expect(rt.RevokedAt()).To(BeNil())
+		})
 	})
 
 	Context("Token Lifecycle and Revocation", func() {
@@ -91,6 +114,67 @@ var _ = Describe("RefreshToken Domain", func() {
 			revokeTime := now.Add(10 * time.Minute)
 			Expect(rt.Revoke(revokeTime)).To(Succeed())
 			Expect(rt.Revoke(revokeTime)).To(MatchError(session.ErrAlreadyRevoked))
+		})
+	})
+
+	Context("Rotate", func() {
+		It("should return a new rotated token with updated ID and hash", func() {
+			now := time.Now()
+			rt, err := session.New(uuid.New(), uuid.New(), "old-hash", "device", ip, time.Hour, now)
+			Expect(err).NotTo(HaveOccurred())
+
+			newID := uuid.New()
+			rotateNow := now.Add(time.Minute)
+			rotated, err := rt.Rotate(newID, "new-hash", rotateNow)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(rotated.ID()).To(Equal(newID))
+			Expect(rotated.TokenHash()).To(Equal("new-hash"))
+			Expect(rotated.UserID()).To(Equal(rt.UserID()))
+			Expect(rotated.DeviceInfo()).To(Equal(rt.DeviceInfo()))
+			Expect(rotated.IPAddress()).To(Equal(rt.IPAddress()))
+			Expect(rotated.ExpiresAt()).To(Equal(rt.ExpiresAt()))
+			Expect(rotated.CreatedAt()).To(Equal(rotateNow))
+			Expect(rotated.RevokedAt()).To(BeNil())
+		})
+
+		DescribeTable("Invalid rotation",
+			func(newID session.RefreshTokenID, newTokenHash string, expectedErr error) {
+				rt, err := session.New(uuid.New(), uuid.New(), "old-hash", "device", ip, time.Hour, time.Now())
+				Expect(err).NotTo(HaveOccurred())
+
+				rotated, err := rt.Rotate(newID, newTokenHash, time.Now())
+				Expect(rotated).To(BeNil())
+				Expect(err).To(MatchError(domain.ErrValidation))
+				Expect(err).To(MatchError(expectedErr))
+			},
+			Entry("Nil Session ID", uuid.Nil, "new-hash", session.ErrIDRequired),
+			Entry("Empty Token Hash", uuid.New(), "", session.ErrTokenHashRequired),
+		)
+	})
+
+	Context("Reconstruct", func() {
+		It("should accurately reconstruct a token from storage values", func() {
+			id := uuid.New()
+			uID := uuid.New()
+			hash := "stored-hash"
+			device := "mobile"
+			now := time.Now()
+			expiresAt := now.Add(time.Hour)
+			createdAt := now.Add(-time.Hour)
+			revokedAt := &now
+
+			rt := session.Reconstruct(id, uID, hash, device, ip, expiresAt, revokedAt, createdAt)
+
+			Expect(rt.ID()).To(Equal(id))
+			Expect(rt.UserID()).To(Equal(uID))
+			Expect(rt.TokenHash()).To(Equal(hash))
+			Expect(rt.DeviceInfo()).To(Equal(device))
+			Expect(rt.IPAddress()).To(Equal(ip))
+			Expect(rt.ExpiresAt()).To(Equal(expiresAt))
+			Expect(rt.CreatedAt()).To(Equal(createdAt))
+			Expect(rt.RevokedAt()).To(Equal(revokedAt))
+			Expect(rt.IsRevoked()).To(BeTrue())
 		})
 	})
 
