@@ -12,10 +12,20 @@ type PASETOConfig struct {
 	PublicKey string `koanf:"public_key" validate:"omitempty,hexadecimal"`
 }
 
+// SECURITY: never log this field
+func (c PASETOConfig) String() string {
+	return "crypto.PASETOConfig{SymmetricKey: ***REDACTED***, SecretKey: ***REDACTED***, PublicKey: ***REDACTED***}"
+}
+
 type Config struct {
 	// HMACSecret используется в SecretManager для хеширования токенов, кодов инвайтов и advisory locks.
 	HMACSecret string       `koanf:"hmac_secret" validate:"required,min=32"`
 	PASETO     PASETOConfig `koanf:"paseto" validate:"required"`
+}
+
+// SECURITY: never log this field
+func (c Config) String() string {
+	return "crypto.Config{HMACSecret: ***REDACTED***, PASETO: " + c.PASETO.String() + "}"
 }
 
 var defaultCfg = Config{}
