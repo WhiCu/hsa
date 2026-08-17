@@ -39,6 +39,14 @@ type webauthnUser struct {
 	credentials []gowebauthn.Credential
 }
 
+// SECURITY: never log this field
+func (u *webauthnUser) String() string {
+	if u == nil {
+		return "<nil>"
+	}
+	return "webauthnUser{id: " + u.id.String() + ", credentials: ***REDACTED***}"
+}
+
 func (u *webauthnUser) WebAuthnID() []byte                           { return u.id[:] }
 func (u *webauthnUser) WebAuthnName() string                         { return u.id.String() }
 func (u *webauthnUser) WebAuthnDisplayName() string                  { return u.id.String() }
