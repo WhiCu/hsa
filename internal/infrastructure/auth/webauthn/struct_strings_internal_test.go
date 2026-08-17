@@ -6,13 +6,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/whicu/hsa/internal/domain/user"
 )
 
 var _ = Describe("webauthnUser String()", func() {
 	It("should redact credentials array", func() {
 		u := &webauthnUser{
-			id: user.UserID(uuid.New()),
+			id: uuid.New(),
 			credentials: []gowebauthn.Credential{
 				{
 					ID:        []byte("secret-credential-id"),

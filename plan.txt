@@ -1,0 +1,12 @@
+The CI job "lint" failed with the following error:
+[FAILURE] File: internal/infrastructure/auth/webauthn/struct_strings_internal_test.go, Line: 15
+Message: unnecessary conversion (unconvert)
+The unconvert linter is complaining about `id: user.UserID(uuid.New())`. `user.UserID` is simply an alias for `uuid.UUID` (`type UserID = uuid.UUID`).
+So doing `user.UserID(uuid.New())` is redundant because `uuid.New()` is already of type `uuid.UUID` (which is identically `user.UserID`).
+We need to remove `user.UserID(...)`.
+
+Plan:
+1. Fix unnecessary conversion in `internal/infrastructure/auth/webauthn/struct_strings_internal_test.go`
+   - Change `id: user.UserID(uuid.New())` to `id: uuid.New()`
+2. Run `go test ./...` again.
+3. Resubmit PR with the fix.
