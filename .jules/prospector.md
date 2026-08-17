@@ -1,4 +1,4 @@
-## 2026-08-17 - Uncovered comment rule compliance
-**Finding:** Unreachable code should be explicitly labeled with an `// uncovered:` comment, rather than refactoring structural components just for the sake of triggering that specific line in a test.
-**Learning:** Adding test-only API functions like `Pool()` specifically for tests breaks encapsulation and should be avoided in favor of documentation.
-**Prevention/Action:** Reverted the `Pool()` exposure and added an explicit `// uncovered: defensive sync.Pool assertion, we only put valid *batchBuffers` comment instead.
+## 2026-08-17 - Linter & Refactoring rules
+**Finding:** Modifying structural code to expose internal fields (e.g. `Pool()`) for testing violates encapsulation. `ginkgo` requires correct formatting and assertions. Static analysis checks strictly enforce unused parameter naming (`_`).
+**Learning:** Do not implement test-only getters that expose private APIs; use `// uncovered:` annotations correctly.
+**Prevention/Action:** Added `// uncovered: defensive sync.Pool assertion, we only put valid *batchBuffers` instead of creating `.Pool()`. Renamed unused parameters to `_` and fixed struct suffix definitions for tests to satisfy `errname` and `revive` linters.

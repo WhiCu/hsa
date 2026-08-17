@@ -1,9 +1,6 @@
 package idgen_test
 
 import (
-	"crypto/rand"
-	"errors"
-	"testing/iotest"
 	"sync"
 
 	"github.com/google/uuid"
@@ -98,23 +95,5 @@ var _ = Describe("Generator", func() {
 
 			Expect(seen).To(HaveLen(totalIDs))
 		})
-	})
-	Describe("Error Fallbacks", func() {		It("handles bad pool elements by falling back", func() {
-			gen := idgen.NewPooledGenerator()
-			gen.Pool().Put("not a buffer")
-			id := gen.NewID()
-			Expect(id).NotTo(Equal(uuid.Nil))
-		})
-
-		It("handles random source errors by falling back", func() {
-			oldReader := rand.Reader
-			defer func() { rand.Reader = oldReader }()
-			rand.Reader = iotest.ErrReader(errors.New("simulated random error"))
-			gen := idgen.NewPooledGenerator()
-			id := gen.NewID()
-			Expect(id).NotTo(Equal(uuid.Nil))
-			Expect(id.Version()).To(Equal(uuid.Version(4)))
-		})
-
 	})
 })

@@ -1,13 +1,13 @@
 package logger_test
 
 import (
-	"github.com/knadh/koanf/v2"
 	"context"
 	"log/slog"
-	"path/filepath"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/knadh/koanf/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/do/v2"
@@ -23,8 +23,9 @@ func TestLoggerPkg(t *testing.T) {
 var _ = Describe("Logger Package", func() {
 	Context("Error Wrapper", func() {
 		It("wraps errors with prefix", func() {
-			// We can't access unexported wrapLoggerError directly,
-			// but it's hit when triggering config failures inside newService.
+			// Just a sanity check for level wrapper coverage
+			_, _, err := logger.Logger(logger.Config{Level: "invalid"})
+			Expect(err).To(HaveOccurred())
 		})
 	})
 
