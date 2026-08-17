@@ -51,6 +51,8 @@ var _ = Describe("Credential", func() {
 				Expect(c.SignCount()).To(BeZero())
 				Expect(c.Transports()).To(Equal(transports))
 				Expect(c.CreatedAt()).To(Equal(now))
+				Expect(c.IsRevoked()).To(BeFalse())
+				Expect(c.RevokedAt()).To(BeNil())
 			}
 		},
 
@@ -98,6 +100,50 @@ var _ = Describe("Credential", func() {
 			err = c.SetSignCount(15)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.SignCount()).To(Equal(uint32(15)))
+		})
+
+		It("should properly revoke", func() {
+			c, err := credential.New(uuid.New(), []byte("external-id"), uuid.New(), []byte("key"), []string{usbTransport}, time.Now())
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(c.IsRevoked()).To(BeFalse())
+			Expect(c.RevokedAt()).To(BeNil())
+
+			now := time.Now()
+			err = c.Revoke(now)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(c.IsRevoked()).To(BeTrue())
+			Expect(c.RevokedAt()).NotTo(BeNil())
+			Expect(*c.RevokedAt()).To(Equal(now))
+
+			err = c.Revoke(now)
+			Expect(err).To(MatchError(credential.ErrAlreadyRevoked))
+		})
+	})
+
+	Context("Reconstruction", func() {
+		It("should properly reconstruct", func() {
+			id := uuid.New()
+			externalID := []byte("external-id")
+			userID := uuid.New()
+			pubKey := []byte("pubkey")
+			signCount := uint32(42)
+			transports := []string{"usb"}
+			createdAt := time.Now().Add(-time.Hour)
+			revokedAt := time.Now()
+
+			c := credential.Reconstruct(id, externalID, userID, pubKey, signCount, transports, createdAt, &revokedAt)
+			Expect(c).NotTo(BeNil())
+			Expect(c.ID()).To(Equal(id))
+			Expect(c.ExternalID()).To(Equal(externalID))
+			Expect(c.UserID()).To(Equal(userID))
+			Expect(c.PublicKey()).To(Equal(pubKey))
+			Expect(c.SignCount()).To(Equal(signCount))
+			Expect(c.Transports()).To(Equal(transports))
+			Expect(c.CreatedAt()).To(Equal(createdAt))
+			Expect(c.IsRevoked()).To(BeTrue())
+			Expect(*c.RevokedAt()).To(Equal(revokedAt))
 		})
 	})
 

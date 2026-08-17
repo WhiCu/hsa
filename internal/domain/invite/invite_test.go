@@ -42,6 +42,26 @@ var _ = Describe("Invite", func() {
 			Entry("Nil CreatedBy ID", uuid.New(), uuid.Nil, "hash123", user.ErrIDRequired),
 			Entry("Empty Code Hash", uuid.New(), uuid.New(), "", invite.ErrCodeHashRequired),
 		)
+
+		It("should successfully create and return correct attributes", func() {
+			id := uuid.New()
+			createdBy := uuid.New()
+			codeHash := "valid-hash"
+			now := time.Now()
+			ttl := time.Hour
+
+			inv, err := invite.New(id, createdBy, codeHash, ttl, now)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(inv).NotTo(BeNil())
+
+			Expect(inv.ID()).To(Equal(id))
+			Expect(inv.CreatedBy()).To(Equal(createdBy))
+			Expect(inv.CodeHash()).To(Equal(codeHash))
+			Expect(inv.CreatedAt()).To(Equal(now))
+			Expect(inv.ExpiresAt()).To(Equal(now.Add(ttl)))
+			Expect(inv.UsedBy()).To(BeNil())
+			Expect(inv.UsedAt()).To(BeNil())
+		})
 	})
 
 	Context("Redeem lifecycle", func() {
@@ -65,9 +85,16 @@ var _ = Describe("Invite", func() {
 			Expect(inv.IsUsed()).To(BeFalse())
 			Expect(inv.IsExpired(now)).To(BeFalse())
 
-			err := inv.Redeem(redeemer, now.Add(30*time.Minute))
+			redeemTime := now.Add(30 * time.Minute)
+			err := inv.Redeem(redeemer, redeemTime)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inv.IsUsed()).To(BeTrue())
+
+			Expect(inv.UsedBy()).NotTo(BeNil())
+			Expect(*inv.UsedBy()).To(Equal(redeemer))
+
+			Expect(inv.UsedAt()).NotTo(BeNil())
+			Expect(*inv.UsedAt()).To(Equal(redeemTime))
 		})
 
 		It("should fail redeeming if expired", func() {
@@ -84,6 +111,31 @@ var _ = Describe("Invite", func() {
 
 			err2 := inv.Redeem(redeemer, now.Add(20*time.Minute))
 			Expect(err2).To(MatchError(invite.ErrAlreadyUsed))
+		})
+	})
+
+	Context("Reconstruction", func() {
+		It("should correctly reconstruct an invite", func() {
+			id := uuid.New()
+			createdBy := uuid.New()
+			codeHash := "reconstruct-hash"
+			usedBy := uuid.New()
+			usedAt := time.Now()
+			expiresAt := time.Now().Add(time.Hour)
+			createdAt := time.Now().Add(-time.Hour)
+
+			inv := invite.Reconstruct(id, createdBy, codeHash, &usedBy, &usedAt, expiresAt, createdAt)
+
+			Expect(inv).NotTo(BeNil())
+			Expect(inv.ID()).To(Equal(id))
+			Expect(inv.CreatedBy()).To(Equal(createdBy))
+			Expect(inv.CodeHash()).To(Equal(codeHash))
+			Expect(inv.UsedBy()).NotTo(BeNil())
+			Expect(*inv.UsedBy()).To(Equal(usedBy))
+			Expect(inv.UsedAt()).NotTo(BeNil())
+			Expect(*inv.UsedAt()).To(Equal(usedAt))
+			Expect(inv.ExpiresAt()).To(Equal(expiresAt))
+			Expect(inv.CreatedAt()).To(Equal(createdAt))
 		})
 	})
 
@@ -137,23 +189,28 @@ var _ = Describe("Invite", func() {
 		})
 	})
 
-	It("should redact sensitive fields in String()", func() {
-		inv, err := invite.New(uuid.New(), uuid.New(), "secret-code-hash", time.Hour, time.Now())
-		Expect(err).NotTo(HaveOccurred())
+	Context("String Representation", func() {
+		It("should redact sensitive fields in String()", func() {
+			usedBy := uuid.New()
+			inv := invite.Reconstruct(uuid.New(), uuid.New(), "secret-code-hash", &usedBy, nil, time.Now().Add(time.Hour), time.Now())
 
-		str := inv.String()
-		Expect(str).To(ContainSubstring("***REDACTED***"))
-		Expect(str).NotTo(ContainSubstring("secret-code-hash"))
+			str := inv.String()
+			Expect(str).To(ContainSubstring("***REDACTED***"))
+			Expect(str).NotTo(ContainSubstring("secret-code-hash"))
+			Expect(str).To(ContainSubstring(usedBy.String()))
+		})
 
-		var nilInv *invite.Invite
-		Expect(nilInv.String()).To(Equal("<nil>"))
-	})
+		It("should handle nil usedBy in String()", func() {
+			inv, err := invite.New(uuid.New(), uuid.New(), "secret-code-hash", time.Hour, time.Now())
+			Expect(err).NotTo(HaveOccurred())
 
-	It("should handle nil usedBy in String()", func() {
-		inv, err := invite.New(uuid.New(), uuid.New(), "secret-code-hash", time.Hour, time.Now())
-		Expect(err).NotTo(HaveOccurred())
+			str := inv.String()
+			Expect(str).To(ContainSubstring("usedBy: <nil>"))
+		})
 
-		str := inv.String()
-		Expect(str).To(ContainSubstring("usedBy: <nil>"))
+		It("should handle nil invite in String()", func() {
+			var nilInv *invite.Invite
+			Expect(nilInv.String()).To(Equal("<nil>"))
+		})
 	})
 })
