@@ -61,8 +61,7 @@ func Reset(ctx context.Context, db *sql.DB) error {
 		return nil
 	}
 
-	truncateQuery := "TRUNCATE TABLE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE;"
-	//nolint:gosec // Safe: identifiers are properly sanitized using pgx.Identifier{} above
+	truncateQuery := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE;", strings.Join(tables, ", "))
 	if _, errExec := db.ExecContext(ctx, truncateQuery); errExec != nil {
 		return fmt.Errorf("execute dynamic truncate: %w", errExec)
 	}
