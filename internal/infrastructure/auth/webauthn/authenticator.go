@@ -148,9 +148,9 @@ func (a *Authenticator) getValidateFunc(ctx context.Context, userIDOut *user.Use
 			return nil, findErr
 		}
 
-		waCreds := make([]gowebauthn.Credential, 0, len(creds))
-		for _, c := range creds {
-			waCreds = append(waCreds, toWebAuthnCredential(c))
+		waCreds := make([]gowebauthn.Credential, len(creds))
+		for i, c := range creds {
+			waCreds[i] = toWebAuthnCredential(c)
 		}
 
 		return &webauthnUser{
