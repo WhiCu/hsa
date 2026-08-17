@@ -13,8 +13,8 @@ import (
 )
 
 const testAppConst = "Test App"
-const testDisplayNameConst = "Test"
 const localhostConst = "localhost"
+
 var _ = Describe("Package DI", func() {
 	var injector do.Injector
 

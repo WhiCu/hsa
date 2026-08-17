@@ -17,6 +17,7 @@ import (
 )
 
 var ErrChallengeExpired = errors.New("webauthn: challenge expired or invalid")
+
 const prfConst = "prf"
 
 type ChallengeCodec interface {
