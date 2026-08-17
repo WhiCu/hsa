@@ -101,5 +101,31 @@ var _ = Describe("Registrator", func() {
 			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
 			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
+
+		It("fails when ParseCredentialCreationResponseBytes fails", func(ctx SpecContext) {
+			codec.EXPECT().Decode(testChallengeToken, mock.Anything).Return(nil).Once()
+			invalidResponse := []byte(`{"id": "not-valid", "type": "public-key"}`)
+			res, err := reg.Finish(ctx, testChallengeToken, invalidResponse)
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
+			Expect(res.UserID).To(Equal(uuid.Nil))
+		})
+
+		It("fails when session decoding succeeds but CreateCredential fails", func(ctx SpecContext) {
+			codec.EXPECT().Decode(testChallengeToken, mock.Anything).Return(nil).Once()
+			invalidResponse := []byte(`{
+                "id": "abc",
+                "rawId": "YWJj",
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": "eyJjaGFsbGVuZ2UiOiAiY2hhbGxlbmdlIiwgIm9yaWdpbiI6ICJvcmlnaW4iLCAidHlwZSI6ICJ3ZWJhdXRobi5jcmVhdGUifQ==",
+                    "attestationObject": "YXR0ZXN0YXRpb25PYmplY3Q="
+                }
+            }`)
+			res, err := reg.Finish(ctx, testChallengeToken, invalidResponse)
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
+			Expect(res.UserID).To(Equal(uuid.Nil))
+		})
 	})
 })

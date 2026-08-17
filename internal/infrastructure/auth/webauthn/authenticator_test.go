@@ -99,5 +99,14 @@ var _ = Describe("Authenticator", func() {
 			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
 			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
+
+		It("fails when ParseCredentialRequestResponseBytes fails", func(ctx SpecContext) {
+			codec.EXPECT().Decode(testChallengeToken, mock.Anything).Return(nil).Once()
+			invalidResponse := []byte(`{"id": "not-valid", "type": "public-key"}`)
+			res, err := auth.Finish(ctx, testChallengeToken, invalidResponse)
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
+			Expect(res.UserID).To(Equal(uuid.Nil))
+		})
 	})
 })

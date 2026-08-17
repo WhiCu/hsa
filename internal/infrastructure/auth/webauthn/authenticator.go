@@ -94,35 +94,7 @@ func (a *Authenticator) Finish(ctx context.Context, challengeToken string, respo
 	var userID user.UserID
 
 	_, cred, err := a.wa.ValidatePasskeyLogin(
-		func(_, userHandle []byte) (gowebauthn.User, error) {
-			candidateID, parseErr := user.NewUserID(userHandle)
-			if parseErr != nil {
-				a.log.WarnContext(ctx, "invalid user handle in webauthn passkey login",
-					slog.Any("error", parseErr),
-				)
-				return nil, ErrUserHandleInvalid
-			}
-			userID = candidateID
-
-			creds, findErr := a.credentials.FindByUserID(ctx, candidateID)
-			if findErr != nil {
-				a.log.ErrorContext(ctx, "failed to find credentials for user during webauthn login",
-					slog.String("user_id", candidateID.String()),
-					slog.Any("error", findErr),
-				)
-				return nil, findErr
-			}
-
-			waCreds := make([]gowebauthn.Credential, 0, len(creds))
-			for _, c := range creds {
-				waCreds = append(waCreds, toWebAuthnCredential(c))
-			}
-
-			return &webauthnUser{
-				id:          candidateID,
-				credentials: waCreds,
-			}, nil
-		},
+		a.getValidateFunc(ctx, &userID),
 		payload.SessionData,
 		parsed,
 	)
@@ -153,5 +125,37 @@ func toWebAuthnCredential(c *credential.Credential) gowebauthn.Credential {
 		Authenticator: gowebauthn.Authenticator{
 			SignCount: c.SignCount(),
 		},
+	}
+}
+
+func (a *Authenticator) getValidateFunc(ctx context.Context, userIDOut *user.UserID) func(rawID []byte, userHandle []byte) (gowebauthn.User, error) {
+	return func(_, userHandle []byte) (gowebauthn.User, error) {
+		candidateID, parseErr := user.NewUserID(userHandle)
+		if parseErr != nil {
+			a.log.WarnContext(ctx, "invalid user handle in webauthn passkey login",
+				slog.Any("error", parseErr),
+			)
+			return nil, ErrUserHandleInvalid
+		}
+		*userIDOut = candidateID
+
+		creds, findErr := a.credentials.FindByUserID(ctx, candidateID)
+		if findErr != nil {
+			a.log.ErrorContext(ctx, "failed to find credentials for user during webauthn login",
+				slog.String("user_id", candidateID.String()),
+				slog.Any("error", findErr),
+			)
+			return nil, findErr
+		}
+
+		waCreds := make([]gowebauthn.Credential, 0, len(creds))
+		for _, c := range creds {
+			waCreds = append(waCreds, toWebAuthnCredential(c))
+		}
+
+		return &webauthnUser{
+			id:          candidateID,
+			credentials: waCreds,
+		}, nil
 	}
 }

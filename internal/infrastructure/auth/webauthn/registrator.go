@@ -18,6 +18,8 @@ import (
 
 var ErrChallengeExpired = errors.New("webauthn: challenge expired or invalid")
 
+const prfConst = "prf"
+
 type ChallengeCodec interface {
 	Encode(payload any, ttl time.Duration) (token string, err error)
 	Decode(token string, out any) error
@@ -70,7 +72,7 @@ func (r *Registrator) Begin(ctx context.Context, candidateUserID user.UserID, in
 			UserVerification: protocol.VerificationRequired,
 		}),
 		gowebauthn.WithExtensions(protocol.AuthenticationExtensions{
-			"prf": struct{}{},
+			prfConst: struct{}{},
 		}),
 	)
 	if err != nil {
@@ -170,7 +172,7 @@ func (r *Registrator) Finish(ctx context.Context, challengeToken string, respons
 }
 
 func parsePRFExtension(exts protocol.AuthenticationExtensionsClientOutputs) bool {
-	prfResult, ok := exts["prf"]
+	prfResult, ok := exts[prfConst]
 	if !ok {
 		return false
 	}

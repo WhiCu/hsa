@@ -14,6 +14,8 @@ import (
 
 const testChallengeToken = "test-challenge-token"
 
+const enabledConst = "enabled"
+
 func newTestWebAuthn(t interface{ Helper() }) *gowebauthn.WebAuthn {
 	t.Helper()
 	wa, err := gowebauthn.New(&gowebauthn.Config{
@@ -79,5 +81,27 @@ var _ = Describe("Registrator", func() {
 		Expect(str).NotTo(ContainSubstring("super-secret-challenge"))
 		Expect(str).To(ContainSubstring("InviteID: " + inviteID.String()))
 		Expect(str).To(ContainSubstring("UserID: " + userID.String()))
+	})
+
+	It("should return false for missing or invalid prf extension", func() {
+		Expect(parsePRFExtension(nil)).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: "not a map"})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: "not a bool"}})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: false}})).To(BeFalse())
+		Expect(parsePRFExtension(map[string]any{prfConst: map[string]any{enabledConst: true}})).To(BeTrue())
+	})
+
+	It("should handle WebAuthnCredentials and properties correctly", func() {
+		wu := webauthnUser{
+			id: userID,
+			credentials: []gowebauthn.Credential{
+				{ID: []byte("test")},
+			},
+		}
+		Expect(wu.WebAuthnID()).To(Equal(userID[:]))
+		Expect(wu.WebAuthnName()).To(Equal(userID.String()))
+		Expect(wu.WebAuthnDisplayName()).To(Equal(userID.String()))
+		Expect(wu.WebAuthnCredentials()).To(HaveLen(1))
+		Expect(wu.WebAuthnCredentials()[0].ID).To(Equal([]byte("test")))
 	})
 })
