@@ -2,7 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/whicu/hsa/internal/domain"
+	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/infrastructure/storage/pg"
 )
@@ -32,9 +36,46 @@ func (r *WrappedKeyRepository) Save(ctx context.Context, keys ...*key.WrappedKey
 	return err
 }
 
-func scopeToPG(s key.Scope) pg.WrappedKeyScope {
-	if s == key.ScopeDecoy {
-		return pg.WrappedKeyScopeDecoy
+func (r *WrappedKeyRepository) FindByCredentialID(ctx context.Context, credentialID credential.CredentialID) ([]*key.WrappedKey, error) {
+	rows, err := r.storage.GetQueries(ctx).ListWrappedKeysByCredentialID(ctx, credentialID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
 	}
-	return pg.WrappedKeyScopeMain
+	if len(rows) == 0 {
+		return nil, domain.ErrNotFound
+	}
+	keys := make([]*key.WrappedKey, len(rows))
+	for i, row := range rows {
+		keys[i] = rowToWrappedKey(row)
+	}
+	return keys, nil
+}
+
+func scopeToPG(s key.Scope) pg.WrappedKeyScope {
+	if s == key.ScopeMain {
+		return pg.WrappedKeyScopeMain
+	}
+	return pg.WrappedKeyScopeDecoy
+}
+
+func scopeFromPG(s pg.WrappedKeyScope) key.Scope {
+	if s == pg.WrappedKeyScopeMain {
+		return key.ScopeMain
+	}
+	return key.ScopeDecoy
+}
+
+func rowToWrappedKey(row pg.WrappedKey) *key.WrappedKey {
+	return key.Reconstruct(
+		row.ID,
+		row.UserID,
+		row.CredentialID,
+		scopeFromPG(row.Scope),
+		row.WrappedDek,
+		row.WrapAlgorithm,
+		row.CreatedAt,
+	)
 }

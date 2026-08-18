@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/do/v2"
 
+	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/domain/user"
@@ -106,6 +107,110 @@ var _ = Describe("WrappedKeyRepository", func() {
 		})
 	})
 
+	Describe("FindByCredentialID", func() {
+		It("successfully finds and reconstructs all wrapped keys associated with credential", func(ctx SpecContext) {
+			now := time.Now().Truncate(time.Microsecond)
+
+			mainKeyID := uuid.New()
+			mainKey := key.Reconstruct(
+				mainKeyID,
+				testUserID,
+				testCredID,
+				key.ScopeMain,
+				[]byte("main-dek-payload-bytes"),
+				"AES-256-GCM-KW",
+				now,
+			)
+
+			decoyKeyID := uuid.New()
+			decoyKey := key.Reconstruct(
+				decoyKeyID,
+				testUserID,
+				testCredID,
+				key.ScopeDecoy,
+				[]byte("decoy-dek-payload-bytes"),
+				"AES-256-GCM-KW",
+				now,
+			)
+
+			Expect(wrappedKeyRepo.Save(ctx, mainKey, decoyKey)).To(Succeed())
+
+			keys, err := wrappedKeyRepo.FindByCredentialID(ctx, testCredID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(keys).To(HaveLen(2))
+
+			// Находим каждый ключ и сверяем данные и преобразование enum Scope
+			var foundMain, foundDecoy *key.WrappedKey
+			for _, k := range keys {
+				if k.Scope() == key.ScopeMain {
+					foundMain = k
+				} else if k.Scope() == key.ScopeDecoy {
+					foundDecoy = k
+				}
+			}
+
+			Expect(foundMain).ToNot(BeNil())
+			Expect(foundMain.ID()).To(Equal(mainKeyID))
+			Expect(foundMain.UserID()).To(Equal(testUserID))
+			Expect(foundMain.CredentialID()).To(Equal(testCredID))
+			Expect(foundMain.WrappedDEK()).To(Equal([]byte("main-dek-payload-bytes")))
+			Expect(foundMain.WrapAlgorithm()).To(Equal("AES-256-GCM-KW"))
+			Expect(foundMain.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
+
+			Expect(foundDecoy).ToNot(BeNil())
+			Expect(foundDecoy.ID()).To(Equal(decoyKeyID))
+			Expect(foundDecoy.UserID()).To(Equal(testUserID))
+			Expect(foundDecoy.CredentialID()).To(Equal(testCredID))
+			Expect(foundDecoy.WrappedDEK()).To(Equal([]byte("decoy-dek-payload-bytes")))
+			Expect(foundDecoy.WrapAlgorithm()).To(Equal("AES-256-GCM-KW"))
+			Expect(foundDecoy.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
+		})
+
+		It("returns only keys belonging to the requested credential and ignores other credentials", func(ctx SpecContext) {
+			now := time.Now().Truncate(time.Microsecond)
+
+			// Создаем второй credential
+			secondCredID := uuid.New()
+			secondCred := credential.Reconstruct(
+				secondCredID,
+				[]byte("external_cred_for_keys_2"),
+				testUserID,
+				[]byte("public_key_bytes_2"),
+				0,
+				[]string{usbString},
+				now,
+				nil,
+			)
+			Expect(credRepo.Save(ctx, secondCred)).To(Succeed())
+
+			key1 := key.Reconstruct(
+				uuid.New(), testUserID, testCredID, key.ScopeMain, []byte("k1"), "AES-256-GCM-KW", now,
+			)
+			key2 := key.Reconstruct(
+				uuid.New(), testUserID, secondCredID, key.ScopeMain, []byte("k2"), "AES-256-GCM-KW", now,
+			)
+			Expect(wrappedKeyRepo.Save(ctx, key1, key2)).To(Succeed())
+
+			keys, err := wrappedKeyRepo.FindByCredentialID(ctx, testCredID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(keys).To(HaveLen(1))
+			Expect(keys[0].ID()).To(Equal(key1.ID()))
+			Expect(keys[0].CredentialID()).To(Equal(testCredID))
+		})
+
+		It("returns an empty slice when no wrapped keys exist for credential", func(ctx SpecContext) {
+			keys, err := wrappedKeyRepo.FindByCredentialID(ctx, testCredID)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(keys).To(BeNil())
+		})
+
+		It("returns an empty slice for non-existent credential ID", func(ctx SpecContext) {
+			keys, err := wrappedKeyRepo.FindByCredentialID(ctx, uuid.New())
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(keys).To(BeNil())
+		})
+	})
+
 	Describe("Database Constraints Validation", func() {
 		It("enforces unique constraint on (credential_id, scope)", func(ctx SpecContext) {
 			now := time.Now()
@@ -137,7 +242,6 @@ var _ = Describe("WrappedKeyRepository", func() {
 		It("allows the same scope for different credentials", func(ctx SpecContext) {
 			now := time.Now()
 
-			// Создаем второй credential для того же пользователя
 			secondCredID := uuid.New()
 			secondCred := credential.Reconstruct(
 				secondCredID,
@@ -145,7 +249,7 @@ var _ = Describe("WrappedKeyRepository", func() {
 				testUserID,
 				[]byte("public_key_bytes_2"),
 				0,
-				[]string{"usb"},
+				[]string{usbString},
 				now,
 				nil,
 			)

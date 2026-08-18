@@ -16,8 +16,12 @@ import (
 	"github.com/whicu/hsa/pkg/logger"
 )
 
+const (
+	usbString = "usb"
+)
+
 var _ = Describe("CredentialRepository", func() {
-	usbString := "usb"
+
 	var (
 		injector   do.Injector
 		st         *storage.Storage

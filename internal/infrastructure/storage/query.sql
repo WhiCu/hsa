@@ -179,3 +179,8 @@ INSERT INTO wrapped_keys (
     created_at
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: ListWrappedKeysByCredentialID :many
+SELECT *
+FROM wrapped_keys
+WHERE credential_id = sqlc.arg(credential_id);

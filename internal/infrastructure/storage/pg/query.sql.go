@@ -291,6 +291,40 @@ func (q *Queries) ListDescendantUserIDs(ctx context.Context, root uuid.UUID) ([]
 	return items, nil
 }
 
+const listWrappedKeysByCredentialID = `-- name: ListWrappedKeysByCredentialID :many
+SELECT id, user_id, credential_id, scope, wrapped_dek, wrap_algorithm, created_at
+FROM wrapped_keys
+WHERE credential_id = $1
+`
+
+func (q *Queries) ListWrappedKeysByCredentialID(ctx context.Context, credentialID uuid.UUID) ([]WrappedKey, error) {
+	rows, err := q.db.Query(ctx, listWrappedKeysByCredentialID, credentialID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WrappedKey
+	for rows.Next() {
+		var i WrappedKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.CredentialID,
+			&i.Scope,
+			&i.WrappedDek,
+			&i.WrapAlgorithm,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUserByID = `-- name: LockUserByID :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended($1::text, 0)
