@@ -18,6 +18,14 @@ func NewPanicError(v any) *PanicError {
 }
 
 func (e *PanicError) Error() string {
+	// ⚡ Bolt: Use type assertion and string concatenation for common panic types (error and string)
+	// instead of fmt.Sprintf to avoid reflection overhead and reduce memory allocations.
+	if err, ok := e.Value.(error); ok {
+		return "panic recovered: " + err.Error()
+	}
+	if str, ok := e.Value.(string); ok {
+		return "panic recovered: " + str
+	}
 	return fmt.Sprintf("panic recovered: %v", e.Value)
 }
 

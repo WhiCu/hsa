@@ -4,3 +4,6 @@
 ## 2026-08-16 - [Avoiding premature optimization on cold paths]
 **Learning:** Even obvious performance wins like strings.Builder vs fmt.Sprintf should be evaluated for their execution frequency. Optimizing code on cold paths (like database reset functions that only run in test setups) violates the strict rule against premature optimization without measurable impact, and creates unneeded noise. Error formatting logic in errkit, however, is a very hot path due to widespread error wrapping and logging usage.
 **Action:** Always check the call sites and execution frequency of code being optimized before making changes. Avoid any optimizations on test setup/teardown functions or isolated one-off scripts.
+## 2025-02-23 - [Optimizing fmt.Sprintf reflection on hot panic recovery paths]
+**Learning:** `fmt.Sprintf` uses reflection to format arguments, which causes significant overhead and memory allocations. In hot code paths, such as generic panic recovery where values are predominantly of type `error` or `string`, using type assertions (`val.(error)` or `val.(string)`) combined with simple string concatenation is much faster.
+**Action:** Replace `fmt.Sprintf` with type assertions and concatenation for common types before falling back to `fmt.Sprintf` when dealing with untyped (`any`) variables in hot paths to boost performance and reduce allocations.
