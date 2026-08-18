@@ -303,6 +303,11 @@ func newLogin(i do.Injector) (*Login, error) {
 		return nil, err
 	}
 
+	wrappedKeys, err := do.InvokeAs[CredentialWrappedKeysFinder](i)
+	if err != nil {
+		return nil, err
+	}
+
 	authenticator, err := do.InvokeAs[Authenticator](i)
 	if err != nil {
 		return nil, err
@@ -327,6 +332,7 @@ func newLogin(i do.Injector) (*Login, error) {
 		log,
 		credentials,
 		credentialSaver,
+		wrappedKeys,
 		authenticator,
 		sessionIssuer,
 		revokeUser,

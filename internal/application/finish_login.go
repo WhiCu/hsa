@@ -11,6 +11,7 @@ import (
 
 	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/credential"
+	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/domain/user"
 )
 
@@ -24,10 +25,15 @@ type CredentialFinder interface {
 	FindByExternalID(ctx context.Context, externalID []byte) (*credential.Credential, error)
 }
 
+type CredentialWrappedKeysFinder interface {
+	FindByCredentialID(ctx context.Context, credentialID credential.CredentialID) ([]*key.WrappedKey, error)
+}
+
 type Login struct {
 	log             *slog.Logger
 	credentials     CredentialFinder
 	credentialSaver CredentialSaver
+	wrappedKeys     CredentialWrappedKeysFinder
 	authenticator   Authenticator
 	sessionIssuer   *SessionIssuer
 	revokeUser      *RevokeAllUserSessions
@@ -38,6 +44,7 @@ func NewLogin(
 	log *slog.Logger,
 	credentials CredentialFinder,
 	credentialSaver CredentialSaver,
+	wrappedKeys CredentialWrappedKeysFinder,
 	authenticator Authenticator,
 	sessionIssuer *SessionIssuer,
 	revokeUser *RevokeAllUserSessions,
@@ -47,6 +54,7 @@ func NewLogin(
 		log:             log,
 		credentials:     credentials,
 		credentialSaver: credentialSaver,
+		wrappedKeys:     wrappedKeys,
 		authenticator:   authenticator,
 		sessionIssuer:   sessionIssuer,
 		revokeUser:      revokeUser,
@@ -66,14 +74,37 @@ func (in LoginInput) String() string {
 	return fmt.Sprintf("LoginInput{ChallengeToken: ***REDACTED***, AuthenticationResponse: ***REDACTED***, DeviceInfo: %v, IPAddress: %v}", in.DeviceInfo, in.IPAddress)
 }
 
+type WrappedKeyOutput struct {
+	Scope         key.Scope
+	WrappedDEK    []byte
+	WrapAlgorithm string
+}
+
+func (w WrappedKeyOutput) String() string {
+	return fmt.Sprintf("WrappedKeyOutput{Scope: %d, WrappedDEK: %d bytes, WrapAlgorithm: %s}", w.Scope, len(w.WrappedDEK), w.WrapAlgorithm)
+}
+
+func wrappedKeysToOutput(keys []*key.WrappedKey) []WrappedKeyOutput {
+	out := make([]WrappedKeyOutput, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, WrappedKeyOutput{
+			Scope:         k.Scope(),
+			WrappedDEK:    k.WrappedDEK(),
+			WrapAlgorithm: k.WrapAlgorithm(),
+		})
+	}
+	return out
+}
+
 type LoginOutput struct {
 	AccessToken  string
 	RefreshToken string
+	WrappedKeys  []WrappedKeyOutput
 }
 
 // SECURITY: never log this field
 func (out LoginOutput) String() string {
-	return "LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***}"
+	return fmt.Sprintf("LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***, WrappedKeys: %d records}", len(out.WrappedKeys))
 }
 
 func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, error) {
@@ -87,47 +118,23 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 	}
 
 	var (
-		out      LoginOutput
-		userID   user.UserID
-		extIDStr = hex.EncodeToString(result.ExternalID)
+		out           LoginOutput
+		userID        user.UserID
+		extIDStr      = hex.EncodeToString(result.ExternalID)
+		cloneDetected bool
 	)
 
-	cloneDetected := false
 	err = uc.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
-		cred, txErr := uc.credentials.FindByExternalID(ctx, result.ExternalID)
+		cred, txErr := uc.findCredential(ctx, result.ExternalID, extIDStr)
 		if txErr != nil {
-			if errors.Is(txErr, domain.ErrNotFound) {
-				uc.log.WarnContext(ctx, "credential not found during login", slog.String("external_id", extIDStr))
-				return ErrCredentialNotFound
-			}
-			uc.log.ErrorContext(ctx, "failed to find credential by external id", slog.String("external_id", extIDStr), slog.Any("error", txErr))
 			return txErr
-		}
-
-		if cred.IsRevoked() {
-			return ErrCredentialRevoked
 		}
 
 		signErr := cred.SetSignCount(result.NewSignCount)
 		if result.CloneWarning || errors.Is(signErr, credential.ErrSignCountRegression) {
 			cloneDetected = true
-			uc.log.WarnContext(ctx, "cloned credential detected, revoking key and sessions",
-				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Bool("security", true))
-
-			if credErr := cred.Revoke(now); credErr != nil {
-				return credErr
-			}
-			if credSaveErr := uc.credentialSaver.Save(ctx, cred); credSaveErr != nil {
-				return credSaveErr
-			}
-			if revokeErr := uc.revokeUser.Execute(ctx, cred.UserID()); revokeErr != nil {
-				uc.log.ErrorContext(ctx, "failed to revoke user sessions on credential clone detection",
-					slog.String("user_id", cred.UserID().String()), slog.Any("error", revokeErr))
-				return revokeErr
-			}
-			return nil
+			return uc.handleClone(ctx, cred, now)
 		}
-
 		if signErr != nil {
 			uc.log.ErrorContext(ctx, "failed to update credential sign count",
 				slog.String("credential_id", cred.ID().String()), slog.String("user_id", cred.UserID().String()), slog.Any("error", signErr))
@@ -140,6 +147,13 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 			return csErr
 		}
 
+		keys, wkErr := uc.wrappedKeys.FindByCredentialID(ctx, cred.ID())
+		if wkErr != nil {
+			uc.log.ErrorContext(ctx, "failed to find wrapped keys for credential",
+				slog.String("credential_id", cred.ID().String()), slog.Any("error", wkErr))
+			return wkErr
+		}
+
 		access, refresh, txErr := uc.sessionIssuer.Issue(ctx, cred.UserID(), in.DeviceInfo, in.IPAddress, now)
 		if txErr != nil {
 			uc.log.ErrorContext(ctx, "failed to issue session tokens during login",
@@ -148,7 +162,11 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 		}
 
 		userID = cred.UserID()
-		out = LoginOutput{AccessToken: access, RefreshToken: refresh}
+		out = LoginOutput{
+			AccessToken:  access,
+			RefreshToken: refresh,
+			WrappedKeys:  wrappedKeysToOutput(keys),
+		}
 		return nil
 	})
 
@@ -161,7 +179,47 @@ func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, erro
 		return nil, ErrCredentialCloneSuspected
 	}
 
-	uc.log.InfoContext(ctx, "login successfully finished", slog.String("user_id", userID.String()), slog.String("external_id", extIDStr))
-
+	uc.log.InfoContext(ctx, "login successfully finished", slog.String("user_id", userID.String()), slog.String("external_id", extIDStr), slog.Int("wrapped_keys_count", len(out.WrappedKeys)))
 	return &out, nil
+}
+
+func (uc *Login) findCredential(ctx context.Context, externalID []byte, extIDStr string) (*credential.Credential, error) {
+	cred, err := uc.credentials.FindByExternalID(ctx, externalID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			uc.log.WarnContext(ctx, "credential not found during login", slog.String("external_id", extIDStr))
+			return nil, ErrCredentialNotFound
+		}
+		uc.log.ErrorContext(ctx, "failed to find credential by external id", slog.String("external_id", extIDStr), slog.Any("error", err))
+		return nil, err
+	}
+
+	if cred.IsRevoked() {
+		return nil, ErrCredentialRevoked
+	}
+
+	return cred, nil
+}
+
+func (uc *Login) handleClone(ctx context.Context, cred *credential.Credential, now time.Time) error {
+	uc.log.WarnContext(ctx, "cloned credential detected, revoking credential and sessions",
+		slog.String("credential_id", cred.ID().String()),
+		slog.String("user_id", cred.UserID().String()),
+		slog.Bool("security", true),
+	)
+
+	if err := cred.Revoke(now); err != nil {
+		return err
+	}
+	if err := uc.credentialSaver.Save(ctx, cred); err != nil {
+		return err
+	}
+	if err := uc.revokeUser.Execute(ctx, cred.UserID()); err != nil {
+		uc.log.ErrorContext(ctx, "failed to revoke user sessions on credential clone detection",
+			slog.String("user_id", cred.UserID().String()),
+			slog.Any("error", err),
+		)
+		return err
+	}
+	return nil
 }
