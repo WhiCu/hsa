@@ -55,8 +55,10 @@ func registerPackages(i do.Injector, configPath string) {
 }
 
 func Run(ctx context.Context, injector *do.RootScope, cfg Config) error {
-	if err := cfgView(injector, cfg.CfgView); err != nil {
-		return fmt.Errorf("cfg view: %w", err)
+	if cfg.CfgView {
+		if err := cfgView(injector); err != nil {
+			return fmt.Errorf("cfg view: %w", err)
+		}
 	}
 
 	if err := initTelemetry(injector); err != nil {
@@ -167,10 +169,7 @@ func waitForShutdown(ctx context.Context, injector *do.RootScope) error {
 	return nil
 }
 
-func cfgView(i do.Injector, ok bool) error {
-	if !ok {
-		return nil
-	}
+func cfgView(i do.Injector) error {
 	k, err := do.Invoke[*koanf.Koanf](i)
 	if err != nil {
 		return fmt.Errorf("init koanf: %w", err)
