@@ -18,6 +18,7 @@ import (
 	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/credential"
+	"github.com/whicu/hsa/internal/domain/user"
 	"github.com/whicu/hsa/pkg/logger"
 )
 
@@ -221,6 +222,106 @@ var _ = Describe("Login", func() {
 				out, err := finishUC.Execute(ctx, newInput())
 
 				Expect(err).To(MatchError(dbErr))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("Credential Revoked: returns ErrCredentialRevoked", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				authResult := newAuthResult(42)
+				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+
+				cred := newCredential(10)
+				err := cred.Revoke(fixedNow)
+				Expect(err).ToNot(HaveOccurred())
+				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+
+				out, err := finishUC.Execute(ctx, newInput())
+
+				Expect(err).To(MatchError(application.ErrCredentialRevoked))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("Clone Warning: authenticator returns clone warning, revokes credential and sessions", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				authResult := newAuthResult(42)
+				authResult.CloneWarning = true // Trigger clone detection
+				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+
+				cred := newCredential(10)
+				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+
+				credentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+					return c.IsRevoked()
+				})).Return(nil).Once()
+
+				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
+
+				out, err := finishUC.Execute(ctx, newInput())
+
+				Expect(err).To(MatchError(application.ErrCredentialCloneSuspected))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("SignCount Regression: triggers clone detection, revokes credential and sessions", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				authResult := newAuthResult(5) // Lower sign count than 10
+				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+
+				cred := newCredential(10)
+				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+
+				credentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+					return c.IsRevoked()
+				})).Return(nil).Once()
+
+				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
+
+				out, err := finishUC.Execute(ctx, newInput())
+
+				Expect(err).To(MatchError(application.ErrCredentialCloneSuspected))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("Credential Revoke Error: fails when saving revoked credential on clone detection", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				authResult := newAuthResult(42)
+				authResult.CloneWarning = true
+				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+
+				cred := newCredential(10)
+				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+
+				saveErr := errors.New("failed to save revoked credential")
+				credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(saveErr).Once()
+
+				out, err := finishUC.Execute(ctx, newInput())
+
+				Expect(err).To(MatchError(saveErr))
+				Expect(out).To(BeNil())
+			})
+		})
+
+		It("Session Revoke Error: fails when revoking sessions on clone detection", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				authResult := newAuthResult(42)
+				authResult.CloneWarning = true
+				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+
+				cred := newCredential(10)
+				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+
+				credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+
+				revokeErr := errors.New("failed to revoke sessions")
+				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, revokeErr).Once()
+
+				out, err := finishUC.Execute(ctx, newInput())
+
+				Expect(err).To(MatchError(revokeErr))
 				Expect(out).To(BeNil())
 			})
 		})
