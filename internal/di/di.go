@@ -2,101 +2,179 @@ package di
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/whicu/hsa/internal/domain/user"
+
+	"github.com/knadh/koanf/v2"
 	"github.com/samber/do/v2"
 	"github.com/whicu/hsa/internal/application"
 	"github.com/whicu/hsa/internal/config"
+	webauthnadapter "github.com/whicu/hsa/internal/infrastructure/auth/webauthn"
+	"github.com/whicu/hsa/internal/infrastructure/crypto"
+	"github.com/whicu/hsa/internal/infrastructure/storage"
 	"github.com/whicu/hsa/internal/infrastructure/telemetry"
-	"github.com/whicu/hsa/internal/presentation/http"
+	"github.com/whicu/hsa/pkg/idgen"
 	"github.com/whicu/hsa/pkg/logger"
 )
 
-const (
-	defaultConfigPath = "./config/config.yaml"
-)
+type Config struct {
+	CfgView      bool
+	CountInvites int
+}
 
-func New() *do.RootScope {
+func New(ctx context.Context, configPath string) *do.RootScope {
 	injector := do.NewWithOpts(&do.InjectorOpts{
-		Logf: func(format string, args ...any) {
-			fmt.Printf("[DI] "+format+"\n", args...)
-		},
+		Logf:                     diLogf,
 		HealthCheckParallelism:   16,
 		HealthCheckGlobalTimeout: 20 * time.Second,
 	})
 
-	{
-		// Inject dependencies
-		config.Package(defaultConfigPath)(injector)
-		telemetry.Package(injector)
-		logger.Package(injector)
-		application.Package(injector)
-		http.Package(injector)
-
-		// Inject global context
-		globalContext(injector)
-	}
+	do.ProvideValue(injector, ctx)
+	registerPackages(injector, configPath)
 
 	return injector
 }
 
-func Run(injector *do.RootScope) error {
-	_, err := do.Invoke[*telemetry.Service](injector)
+func diLogf(format string, args ...any) {
+	fmt.Printf("[DI] "+format+"\n", args...)
+}
+
+func registerPackages(i do.Injector, configPath string) {
+	config.Package(configPath)(i) // no dependencies
+	idgen.Package(i)              // no dependencies
+	telemetry.Package(i)          // config
+	logger.Package(i)             // config, telemetry
+	storage.Package(i)            // config, telemetry
+	crypto.Package(i)             // config
+	webauthnadapter.Package(i)    // config, crypto, storage, telemetry
+	application.Package(i)        // config, webauthnadapter, crypto, storage, telemetry
+}
+
+func Run(ctx context.Context, injector *do.RootScope, cfg Config) error {
+	if err := cfgView(injector, cfg.CfgView); err != nil {
+		return fmt.Errorf("cfg view: %w", err)
+	}
+
+	if err := initTelemetry(injector); err != nil {
+		return err
+	}
+
+	log, err := initLogger(injector)
 	if err != nil {
+		return err
+	}
+
+	if errSrg := initStorage(ctx, injector); errSrg != nil {
+		return errSrg
+	}
+
+	root, errBootstrap := bootstrapRoot(ctx, injector, log)
+	if errBootstrap != nil {
+		return errBootstrap
+	}
+
+	if cfg.CountInvites > 0 {
+		if errRootInvites := createRootInvites(ctx, injector, root, cfg.CountInvites); errRootInvites != nil {
+			return errRootInvites
+		}
+	}
+
+	return waitForShutdown(ctx, injector)
+}
+
+func initTelemetry(injector do.Injector) error {
+	if _, err := do.Invoke[*telemetry.Service](injector); err != nil {
 		return fmt.Errorf("init telemetry service: %w", err)
-	}
-	log, err := do.Invoke[*slog.Logger](injector)
-	if err != nil {
-		return fmt.Errorf("init logger: %w", err)
-	}
-
-	// bcfg, err := do.Invoke[broker.Config](injector)
-	// if err != nil {
-	// 	return fmt.Errorf("init broker config: %w", err)
-	// }
-
-	lcfg, err := do.Invoke[logger.Config](injector)
-	if err != nil {
-		return fmt.Errorf("init logger config: %w", err)
-	}
-	tcfg, err := do.Invoke[telemetry.Config](injector)
-	if err != nil {
-		return fmt.Errorf("init service config: %w", err)
-	}
-
-	ctx := context.Background()
-	log.Log(ctx, 1, "Test", slog.Int("v", 42))
-	log.InfoContext(ctx, "Hello Project!", slog.Bool("b", true))
-	// log.InfoContext(ctx, "Broker Config", slog.Any("cfg", bcfg))
-	log.InfoContext(ctx, "Logger Config", slog.Any("cfg", lcfg))
-	log.InfoContext(ctx, "Telemetry Config", slog.Any("cfg", tcfg))
-
-	// srv, err := do.Invoke[micro.Service](injector)
-	// if err != nil {
-	// 	return fmt.Errorf("init micro service: %w", err)
-	// }
-	// srv.AddEndpoint(
-	// 	"test",
-	// 	micro.HandlerFunc(func(r micro.Request) {
-	// 		log.Info("Received request", slog.String("subject", r.Subject()))
-	// 		log.Info("Received data", slog.String("data", string(r.Data())))
-	// 		if err := r.Respond([]byte("Hello from AI Canvas Helper!")); err != nil {
-	// 			log.Error("Failed to respond", slog.String("error", err.Error()))
-	// 		}
-	// 	}),
-	// )
-
-	_, report := injector.ShutdownOnSignals()
-
-	if err := report.Error(); err != "" {
-		return fmt.Errorf("shutdown: %v", err)
 	}
 	return nil
 }
 
-func globalContext(i do.Injector) {
-	ctx := context.Background()
-	do.ProvideValue(i, ctx)
+func initLogger(injector do.Injector) (*slog.Logger, error) {
+	log, err := do.Invoke[*slog.Logger](injector)
+	if err != nil {
+		return nil, fmt.Errorf("init logger: %w", err)
+	}
+	return log, nil
+}
+
+func initStorage(ctx context.Context, injector do.Injector) error {
+	srg, err := do.Invoke[*storage.Storage](injector)
+	if err != nil {
+		return fmt.Errorf("init storage: %w", err)
+	}
+	if errUp := srg.Up(ctx); errUp != nil {
+		return fmt.Errorf("storage up: %w", errUp)
+	}
+	return nil
+}
+
+func bootstrapRoot(ctx context.Context, injector do.Injector, log *slog.Logger) (*user.User, error) {
+	bootstrap, err := do.Invoke[*application.BootstrapRoot](injector)
+	if err != nil {
+		return nil, fmt.Errorf("init bootstrap root: %w", err)
+	}
+
+	root, err := bootstrap.Execute(ctx)
+	if err != nil && !errors.Is(err, application.ErrRootAlreadyExists) {
+		return nil, fmt.Errorf("bootstrap root: %w", err)
+	}
+
+	log.InfoContext(ctx, "root user successfully created/found", slog.String("root_id", root.ID().String()))
+	return root, nil
+}
+
+type rootInvite struct {
+	Code      string
+	ExpiresAt time.Time
+}
+
+func createRootInvites(ctx context.Context, injector do.Injector, root *user.User, n int) error {
+	rootCreateInvite, err := do.Invoke[*application.RootCreateInvite](injector)
+	if err != nil {
+		return fmt.Errorf("init root create invite: %w", err)
+	}
+
+	invites := make([]rootInvite, n)
+	for i := range n {
+		code, expiresAt, errExec := rootCreateInvite.Execute(ctx, root.ID())
+		if errExec != nil {
+			return fmt.Errorf("create root's invites: %w", errExec)
+		}
+		invites[i] = rootInvite{Code: code, ExpiresAt: expiresAt}
+	}
+
+	printInvitesTable(invites)
+	return nil
+}
+
+func printInvitesTable(invites []rootInvite) {
+	fmt.Println("#\tROOT INVITE CODE\t\t\t\t\tEXPIRES AT")
+	fmt.Println("-\t----------------------------------------------------\t-------------------")
+	for i, inv := range invites {
+		fmt.Printf("%d\t%s\t%s\n", i+1, inv.Code, inv.ExpiresAt.Format(time.RFC822))
+	}
+}
+
+func waitForShutdown(ctx context.Context, injector *do.RootScope) error {
+	_, report := injector.ShutdownOnSignalsWithContext(ctx)
+	if errStr := report.Error(); errStr != "" {
+		return fmt.Errorf("shutdown: %v", errStr)
+	}
+	return nil
+}
+
+func cfgView(i do.Injector, ok bool) error {
+	if !ok {
+		return nil
+	}
+	k, err := do.Invoke[*koanf.Koanf](i)
+	if err != nil {
+		return fmt.Errorf("init koanf: %w", err)
+	}
+	fmt.Println(config.DumpFlat(k))
+	return nil
 }

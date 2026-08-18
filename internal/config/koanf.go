@@ -77,3 +77,11 @@ func resolvePath(def string) (string, error) {
 
 	return path, nil
 }
+
+func DumpFlat(k *koanf.Koanf) string {
+	var sb strings.Builder
+	for key, value := range k.All() {
+		fmt.Fprintf(&sb, "%s = %v\n", key, value)
+	}
+	return sb.String()
+}
