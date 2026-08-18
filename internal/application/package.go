@@ -62,6 +62,54 @@ func newCreateInvite(i do.Injector) (*CreateInvite, error) {
 	), nil
 }
 
+type RootCreateInvite struct {
+	*CreateInvite
+}
+
+func newRootCreateInvite(i do.Injector) (*RootCreateInvite, error) {
+	log, err := do.Invoke[*slog.Logger](i)
+	if err != nil {
+		return nil, err
+	}
+
+	invites, err := do.InvokeAs[InviteSaver](i)
+	if err != nil {
+		return nil, err
+	}
+
+	counter, err := do.InvokeAs[ActiveInviteCounter](i)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens, err := do.InvokeAs[TokenGenerator](i)
+	if err != nil {
+		return nil, err
+	}
+
+	ids, err := do.InvokeAs[IDGenerator](i)
+	if err != nil {
+		return nil, err
+	}
+
+	transactor, err := do.InvokeAs[Transactor](i)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := do.Invoke[Config](i)
+	if err != nil {
+		return nil, err
+	}
+	cfgInvite := cfg.Invite
+
+	ci := NewCreateInvite(
+		log, invites, counter, tokens, ids,
+		invite.NewUnlimitedPolicy(), transactor, cfgInvite.RootTTL,
+	)
+	return &RootCreateInvite{CreateInvite: ci}, nil
+}
+
 func newBeginInviteRegistration(i do.Injector) (*BeginInviteRegistration, error) {
 	log, err := do.Invoke[*slog.Logger](i)
 	if err != nil {
@@ -367,6 +415,7 @@ func newBootstrapRoot(i do.Injector) (*BootstrapRoot, error) {
 var Package = do.Package(
 	do.Lazy(newConfig),
 	do.Lazy(newCreateInvite),
+	do.Lazy(newRootCreateInvite),
 	do.Lazy(newBeginInviteRegistration),
 	do.Lazy(newFinishInviteRegistration),
 	do.Lazy(newSessionIssuer),

@@ -89,7 +89,7 @@ var _ = Describe("Bootstrap", func() {
 		root, err := uc.Execute(ctx)
 
 		Expect(err).To(MatchError(application.ErrRootAlreadyExists))
-		Expect(root).To(BeNil())
+		Expect(root).To(Equal(existingRoot))
 	})
 
 	It("returns error and aborts when finder fails with unexpected error", func(ctx SpecContext) {

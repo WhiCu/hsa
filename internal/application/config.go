@@ -10,7 +10,8 @@ type Config struct {
 type InviteConfig struct {
 	MaxActive int `koanf:"max_active" validate:"required,gt=0"`
 
-	TTL time.Duration `koanf:"ttl" validate:"required,gt=0"`
+	TTL     time.Duration `koanf:"ttl" validate:"required,gt=0"`
+	RootTTL time.Duration `koanf:"root_ttl" validate:"required,gt=0"`
 
 	MaxWrappedKey int `koanf:"max_wrapped_key" validate:"required,gt=0"`
 }
@@ -25,6 +26,7 @@ var defaultCfg = Config{
 	Invite: InviteConfig{
 		MaxActive: 3,
 		TTL:       72 * time.Hour,
+		RootTTL:   (7 * 24) * time.Hour,
 
 		MaxWrappedKey: 10,
 	},

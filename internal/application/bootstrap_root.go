@@ -32,7 +32,7 @@ func (uc *BootstrapRoot) Execute(ctx context.Context) (*user.User, error) {
 	existing, err := uc.finder.FindRoot(ctx)
 	if err == nil {
 		uc.log.WarnContext(ctx, "root already exists, skipping bootstrap", slog.String("root_id", existing.ID().String()))
-		return nil, ErrRootAlreadyExists
+		return existing, ErrRootAlreadyExists
 	}
 	if !errors.Is(err, domain.ErrNotFound) {
 		return nil, err
