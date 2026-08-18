@@ -82,7 +82,7 @@ func TestReset_DummyDB_Coverage(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestUp_DummyDB_Coverage(t *testing.T) {
+func TestUp_DummyDB_Coverage(_ *testing.T) {
 	db, _ := sql.Open("dummy2", "")
 	err := migrations.Up(context.Background(), db)
 	// It'll probably fail internally somewhere but should cover our function up to goose calls
@@ -135,7 +135,7 @@ func (r *emptyRows) Columns() []string { return []string{"table_name"} }
 
 func (r *emptyRows) Close() error { return nil }
 
-func (r *emptyRows) Next(dest []driver.Value) error {
+func (r *emptyRows) Next(_ []driver.Value) error {
 	return io.EOF
 }
 
