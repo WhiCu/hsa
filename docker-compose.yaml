@@ -1,17 +1,71 @@
 services:
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hsa
+    env_file:
+      - config/.env
+    environment:
+      APP_STORAGE_HOST: postgres
+      APP_STORAGE_USER: ${DB_USER:-postgres}
+      APP_STORAGE_PASS: ${DB_PASS:-postgres}
+      APP_STORAGE_NAME: ${DB_NAME:-hsa}
+      APP_TELEMETRY_EXPORTER_CONN_ENDPOINT: otel-collector:4317
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/src/config:ro
+      - app_logs:/src/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    networks:
+      - hsa-net
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: ${DB_NAME:-hsa}
+    env_file:
+      - config/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hsa-net
+
   otel-collector:
     image: otel/opentelemetry-collector
+    container_name: otel-collector
     volumes:
       - ./otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
-      - 1888:1888 # pprof extension
-      - 13133:13133 # health_check extension
-      - 4317:4317 # OTLP gRPC receiver
-      - 4318:4318 # OTLP http receiver
-      - 55679:55679 # zpages extension
+      - "1888:1888"   # pprof extension
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP http receiver
+      - "55679:55679" # zpages extension
+    networks:
+      - hsa-net
 
+volumes:
+  postgres_data:
+  app_logs:
 
-# volumes:
-
-# networks:
+networks:
+  hsa-net:
+    driver: bridge

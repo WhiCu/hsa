@@ -14,7 +14,7 @@ dotenv:
   - '{{.DIR_CONFIG}}/.env'
 
 vars:
-  LOG_LEVEL: "trave"
+  LOG_LEVEL: "debug"
   GOLANGCI_LINT_VERSION: "v2.12.2"
 
 tasks:
@@ -88,6 +88,9 @@ tasks:
 
   run:
     desc: Run main binary
+    env:
+      APP_STORAGE_HOST: postgres
+      APP_TELEMETRY_EXPORTER_CONN_ENDPOINT: otel-collector:4317
     cmds:
       - go run {{.PATH_MAIN}}/main.go
 
@@ -104,7 +107,22 @@ tasks:
     cmds:
       - docker compose up -d --wait
 
+  docker:up:logs:
+    desc: Start full stack
+    cmds:
+      - task: docker:up
+      - task: docker:logs
+
   docker:down:
     desc: Stop full stack
     cmds:
       - docker compose down
+  docker:down:v:
+    desc: Stop full stack with volumes
+    cmds:
+      - docker compose down
+  
+  docker:logs:
+    desc: Show logs
+    cmds:
+      - docker compose logs -f

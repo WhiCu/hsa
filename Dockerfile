@@ -23,4 +23,4 @@ COPY config/ /src/config/
 
 EXPOSE 8080
 
-ENTRYPOINT ["/src/bin/main"]
+ENTRYPOINT ["/src/bin/main", "-v", "-iii"]
