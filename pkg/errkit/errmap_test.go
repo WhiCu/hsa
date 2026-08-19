@@ -2,6 +2,8 @@ package errkit_test
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,54 +12,162 @@ import (
 	"github.com/whicu/hsa/pkg/errkit"
 )
 
-type customError1Error struct{ msg string }
-
-func (e customError1Error) Error() string { return e.msg }
-
-type customError2Error struct{ msg string }
-
-func (e customError2Error) Error() string { return e.msg }
-
-func TestErrMapPkg(t *testing.T) {
+func TestErrKit(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "ErrMap Suite")
+	RunSpecs(t, "ErrKit Suite")
 }
 
-var _ = Describe("ErrMap", func() {
-	It("resolves errors with and without defaults", func() {
-		errMap := &errkit.Registry[int]{}
+type customError1 struct{ msg string }
 
-		err1 := customError1Error{"error 1"}
-		err2 := customError2Error{"error 2"}
-		err3 := errors.New("regular error")
+func (e customError1) Error() string { return e.msg }
 
-		errkit.Register[customError1Error, int](errMap, func(_ error) int {
-			return 100
+type customError2 struct{ code int }
+
+func (e customError2) Error() string { return fmt.Sprintf("code: %d", e.code) }
+
+var errSentinel = errors.New("sentinel error")
+
+var _ = Describe("Registry", func() {
+	Describe("OnAs", func() {
+		It("matches by error type, including wrapped errors", func() {
+			r := errkit.New[int]().
+				OnAs(func(e customError1) int { return 100 }).
+				OnAs(func(e customError2) int { return e.code })
+
+			// Прямое совпадение
+			val, ok := r.Resolve(customError1{msg: "err1"})
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(100))
+
+			val, ok = r.Resolve(customError2{code: 204})
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(204))
+
+			// Обернутая ошибка (%w)
+			wrapped := fmt.Errorf("wrapped: %w", customError1{msg: "nested"})
+			val, ok = r.Resolve(wrapped)
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(100))
 		})
-		errkit.Register[customError2Error, int](errMap, func(_ error) int {
-			return 200
-		})
-		errkit.RegisterDefault(errMap, func(_ error) int {
-			return 500
-		})
-
-		Expect(errMap.Resolve(err1)).To(Equal(100))
-		Expect(errMap.Resolve(err2)).To(Equal(200))
-
-		wrappedErr := errkit.Append(err1, errors.New("extra context"))
-		Expect(errMap.Resolve(wrappedErr)).To(Equal(100))
-
-		Expect(errMap.Resolve(err3)).To(Equal(500))
-		Expect(errMap.Resolve(nil)).To(Equal(500))
 	})
 
-	It("handles missing default safely", func() {
-		errMap := &errkit.Registry[int]{}
-		errkit.Register[customError1Error, int](errMap, func(_ error) int {
-			return 100
-		})
-		err2 := customError2Error{"error 2"}
+	Describe("OnIs", func() {
+		It("matches target sentinel error, including wrapped errors", func() {
+			r := errkit.New[int]().
+				OnIs(func(_ error) int { return 404 }, errSentinel)
 
-		Expect(errMap.Resolve(err2)).To(Equal(0))
+			val, ok := r.Resolve(errSentinel)
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(404))
+
+			wrapped := fmt.Errorf("context: %w", errSentinel)
+			val, ok = r.Resolve(wrapped)
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(404))
+
+			// Несовпадающая ошибка
+			val, ok = r.Resolve(errors.New("other error"))
+			Expect(ok).To(BeFalse())
+			Expect(val).To(Equal(0))
+		})
+	})
+
+	Describe("OnMatch", func() {
+		It("matches when predicate returns true", func() {
+			r := errkit.New[int]().
+				OnMatch(
+					func(err error) bool {
+						return strings.Contains(err.Error(), "connection refused")
+					},
+					func(_ error) int {
+						return 503
+					},
+				)
+
+			val, ok := r.Resolve(errors.New("dial tcp 127.0.0.1: connection refused"))
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(503))
+
+			val, ok = r.Resolve(errors.New("timeout"))
+			Expect(ok).To(BeFalse())
+			Expect(val).To(Equal(0))
+		})
+	})
+
+	Describe("Default fallback", func() {
+		It("uses default handler when no other handlers match", func() {
+			r := errkit.New[int]().
+				OnAs(func(_ customError1) int {
+					return 100
+				}).
+				Default(func(_ error) int {
+					return 500
+				})
+
+			// Совпадение по OnAs
+			val, ok := r.Resolve(customError1{})
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(100))
+
+			// Не совпало -> отрабатывает Default
+			val, ok = r.Resolve(errors.New("unregistered error"))
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal(500))
+		})
+
+		It("returns zero value and false when no handlers match and no default is set", func() {
+			r := errkit.New[int]().
+				OnAs(func(_ customError1) int {
+					return 100
+				})
+
+			val, ok := r.Resolve(errors.New("unregistered error"))
+			Expect(ok).To(BeFalse())
+			Expect(val).To(Equal(0))
+		})
+	})
+
+	Describe("Order of evaluation", func() {
+		It("executes the first matching handler in order of declaration", func() {
+			r := errkit.New[string]().
+				OnIs(func(_ error) string {
+					return "first"
+				}, errSentinel).
+				OnMatch(func(_ error) bool {
+					return true
+				}, func(_ error) string {
+					return "second"
+				})
+
+			val, ok := r.Resolve(errSentinel)
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal("first"))
+		})
+	})
+
+	Describe("Handle", func() {
+		It("returns mapped value and nil error on successful resolution", func() {
+			r := errkit.New[int]().
+				OnIs(func(_ error) int {
+					return 400
+				}, errSentinel)
+
+			val, err := r.Handle(errSentinel)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(val).To(Equal(400))
+		})
+
+		It("returns zero value and the original error when unresolved", func() {
+			r := errkit.New[int]().
+				OnIs(func(_ error) int {
+					return 400
+				}, errSentinel)
+
+			unhandledErr := errors.New("unhandled error")
+			val, err := r.Handle(unhandledErr)
+
+			Expect(err).To(MatchError(unhandledErr))
+			Expect(val).To(Equal(0))
+		})
 	})
 })
