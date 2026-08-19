@@ -48,6 +48,7 @@ func NewKoanf(path string) (*koanf.Koanf, error) {
 		},
 	}), nil)
 
+	// uncovered: load env provider never returns an error natively
 	if err != nil {
 		return nil, fmt.Errorf("load env config: %w", err)
 	}
