@@ -82,8 +82,8 @@ SET
 SELECT count(*)
 FROM invites
 WHERE created_by = sqlc.arg(created_by)
-  AND used_at IS NULL
-  AND expires_at > sqlc.arg(now);
+    AND used_at IS NULL
+    AND expires_at > sqlc.arg(now);
 
 
 -- name: LockUserByID :exec
@@ -147,8 +147,14 @@ FOR UPDATE;
 SELECT *
 FROM refresh_tokens
 WHERE user_id = ANY(sqlc.arg(user_ids)::uuid[])
-  AND revoked_at IS NULL
-  AND expires_at > sqlc.arg(now);
+    AND revoked_at IS NULL
+    AND expires_at > sqlc.arg(now);
+
+-- name: FindRefreshTokenByIDForUpdate :one
+SELECT *
+FROM refresh_tokens
+WHERE id = sqlc.arg(id)
+FOR UPDATE;
 
 
 -- name: SaveRefreshTokens :batchexec

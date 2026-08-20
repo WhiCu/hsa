@@ -201,6 +201,73 @@ var _ = Describe("SessionRepository", func() {
 			Expect(emptyTokens).To(BeEmpty())
 		})
 	})
+	Describe("FindByID", func() {
+		It("successfully finds and reconstructs session by ID", func(ctx SpecContext) {
+			tokenID := uuid.New()
+			tokenHash := "sha256_hash_find_by_id_123"
+			ip := netip.MustParseAddr("10.10.10.5")
+			now := time.Now().Truncate(time.Microsecond)
+			expiresAt := now.Add(7 * 24 * time.Hour)
+
+			sess := session.Reconstruct(
+				tokenID,
+				testUserID,
+				tokenHash,
+				"Firefox / Linux",
+				ip,
+				expiresAt,
+				nil,
+				now,
+			)
+			Expect(sessionRepo.Save(ctx, sess)).To(Succeed())
+
+			found, err := sessionRepo.FindByID(ctx, tokenID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).ToNot(BeNil())
+
+			Expect(found.ID()).To(Equal(tokenID))
+			Expect(found.UserID()).To(Equal(testUserID))
+			Expect(found.TokenHash()).To(Equal(tokenHash))
+			Expect(found.DeviceInfo()).To(Equal("Firefox / Linux"))
+			Expect(found.IPAddress()).To(Equal(ip))
+			Expect(found.ExpiresAt()).To(BeTemporally("~", expiresAt, time.Millisecond))
+			Expect(found.RevokedAt()).To(BeNil())
+			Expect(found.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
+		})
+
+		It("successfully retrieves a revoked session by ID", func(ctx SpecContext) {
+			tokenID := uuid.New()
+			tokenHash := "sha256_hash_revoked_find_by_id"
+			ip := netip.MustParseAddr("10.10.10.6")
+			now := time.Now().Truncate(time.Microsecond)
+			expiresAt := now.Add(24 * time.Hour)
+			revokedAt := now.Add(time.Hour)
+
+			sess := session.Reconstruct(
+				tokenID,
+				testUserID,
+				tokenHash,
+				"Chrome / Android",
+				ip,
+				expiresAt,
+				&revokedAt,
+				now,
+			)
+			Expect(sessionRepo.Save(ctx, sess)).To(Succeed())
+
+			found, err := sessionRepo.FindByID(ctx, tokenID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).ToNot(BeNil())
+			Expect(found.RevokedAt()).ToNot(BeNil())
+			Expect(*found.RevokedAt()).To(BeTemporally("~", revokedAt, time.Millisecond))
+		})
+
+		It("returns domain.ErrNotFound when session ID does not exist", func(ctx SpecContext) {
+			found, err := sessionRepo.FindByID(ctx, uuid.New())
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(found).To(BeNil())
+		})
+	})
 
 	Describe("Database Constraints Validation", func() {
 		It("enforces unique constraint on token_hash", func(ctx SpecContext) {

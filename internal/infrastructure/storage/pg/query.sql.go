@@ -16,8 +16,8 @@ const countActiveInvitesByUser = `-- name: CountActiveInvitesByUser :one
 SELECT count(*)
 FROM invites
 WHERE created_by = $1
-  AND used_at IS NULL
-  AND expires_at > $2
+    AND used_at IS NULL
+    AND expires_at > $2
 `
 
 type CountActiveInvitesByUserParams struct {
@@ -120,6 +120,29 @@ func (q *Queries) FindInviteByIDForUpdate(ctx context.Context, id uuid.UUID) (In
 	return i, err
 }
 
+const findRefreshTokenByIDForUpdate = `-- name: FindRefreshTokenByIDForUpdate :one
+SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
+FROM refresh_tokens
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) FindRefreshTokenByIDForUpdate(ctx context.Context, id uuid.UUID) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, findRefreshTokenByIDForUpdate, id)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.IpAddress,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const findRefreshTokenByTokenHash = `-- name: FindRefreshTokenByTokenHash :one
 SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
 FROM refresh_tokens
@@ -180,8 +203,8 @@ const listActiveRefreshTokensByUserIDs = `-- name: ListActiveRefreshTokensByUser
 SELECT id, user_id, token_hash, device_info, ip_address, expires_at, revoked_at, created_at
 FROM refresh_tokens
 WHERE user_id = ANY($1::uuid[])
-  AND revoked_at IS NULL
-  AND expires_at > $2
+    AND revoked_at IS NULL
+    AND expires_at > $2
 `
 
 type ListActiveRefreshTokensByUserIDsParams struct {

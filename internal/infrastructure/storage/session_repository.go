@@ -32,6 +32,17 @@ func (r *SessionRepository) FindByTokenHash(ctx context.Context, hash string) (*
 	return rowToSession(row), nil
 }
 
+func (r *SessionRepository) FindByID(ctx context.Context, id session.RefreshTokenID) (*session.RefreshToken, error) {
+	row, err := r.storage.GetQueries(ctx).FindRefreshTokenByIDForUpdate(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	return rowToSession(row), nil
+}
+
 func (r *SessionRepository) FindActiveByUserIDs(ctx context.Context, userIDs []user.UserID, now time.Time) ([]*session.RefreshToken, error) {
 	rows, err := r.storage.GetQueries(ctx).ListActiveRefreshTokensByUserIDs(ctx, pg.ListActiveRefreshTokensByUserIDsParams{
 		UserIds: userIDs,
