@@ -287,6 +287,30 @@ func newRevokeAllUserSessions(i do.Injector) (*RevokeAllUserSessions, error) {
 	return NewRevokeAllUserSessions(log, sessions, saver, transactor), nil
 }
 
+func newRevokeSession(i do.Injector) (*RevokeSession, error) {
+	log, err := do.Invoke[*slog.Logger](i)
+	if err != nil {
+		return nil, err
+	}
+
+	sessions, err := do.InvokeAs[RefreshTokenFinderByID](i)
+	if err != nil {
+		return nil, err
+	}
+
+	saver, err := do.InvokeAs[RefreshTokenSaver](i)
+	if err != nil {
+		return nil, err
+	}
+
+	transactor, err := do.InvokeAs[Transactor](i)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRevokeSession(log, sessions, saver, transactor), nil
+}
+
 func newLogin(i do.Injector) (*Login, error) {
 	log, err := do.Invoke[*slog.Logger](i)
 	if err != nil {
@@ -429,6 +453,7 @@ var Package = do.Package(
 	do.Lazy(newLogin),
 	do.Lazy(newRefreshAccessToken),
 	do.Lazy(newRevokeAllUserSessions),
+	do.Lazy(newRevokeSession),
 	do.Lazy(newRevokeCompromisedChain),
 	do.Lazy(newBootstrapRoot),
 )
