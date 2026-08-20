@@ -17,34 +17,35 @@ func TestErrKit(t *testing.T) {
 	RunSpecs(t, "ErrKit Suite")
 }
 
-type customError1 struct{ msg string }
+type custom1Error struct{ msg string }
 
-func (e customError1) Error() string { return e.msg }
+func (e custom1Error) Error() string { return e.msg }
 
-type customError2 struct{ code int }
+type custom2Error struct{ code int }
 
-func (e customError2) Error() string { return fmt.Sprintf("code: %d", e.code) }
+func (e custom2Error) Error() string { return fmt.Sprintf("code: %d", e.code) }
 
 var errSentinel = errors.New("sentinel error")
 
 var _ = Describe("Registry", func() {
 	Describe("OnAs", func() {
 		It("matches by error type, including wrapped errors", func() {
-			r := errkit.New[int]().
-				OnAs(func(e customError1) int { return 100 }).
-				OnAs(func(e customError2) int { return e.code })
+			r := errkit.New(
+				errkit.OnAs(func(_ custom1Error) int { return 100 }),
+				errkit.OnAs(func(e custom2Error) int { return e.code }),
+			)
 
 			// Прямое совпадение
-			val, ok := r.Resolve(customError1{msg: "err1"})
+			val, ok := r.Resolve(custom1Error{msg: "err1"})
 			Expect(ok).To(BeTrue())
 			Expect(val).To(Equal(100))
 
-			val, ok = r.Resolve(customError2{code: 204})
+			val, ok = r.Resolve(custom2Error{code: 204})
 			Expect(ok).To(BeTrue())
 			Expect(val).To(Equal(204))
 
 			// Обернутая ошибка (%w)
-			wrapped := fmt.Errorf("wrapped: %w", customError1{msg: "nested"})
+			wrapped := fmt.Errorf("wrapped: %w", custom1Error{msg: "nested"})
 			val, ok = r.Resolve(wrapped)
 			Expect(ok).To(BeTrue())
 			Expect(val).To(Equal(100))
@@ -53,8 +54,9 @@ var _ = Describe("Registry", func() {
 
 	Describe("OnIs", func() {
 		It("matches target sentinel error, including wrapped errors", func() {
-			r := errkit.New[int]().
-				OnIs(func(_ error) int { return 404 }, errSentinel)
+			r := errkit.New(
+				errkit.OnIs(func(_ error) int { return 404 }, errSentinel),
+			)
 
 			val, ok := r.Resolve(errSentinel)
 			Expect(ok).To(BeTrue())
@@ -74,15 +76,16 @@ var _ = Describe("Registry", func() {
 
 	Describe("OnMatch", func() {
 		It("matches when predicate returns true", func() {
-			r := errkit.New[int]().
-				OnMatch(
+			r := errkit.New(
+				errkit.OnMatch(
 					func(err error) bool {
 						return strings.Contains(err.Error(), "connection refused")
 					},
 					func(_ error) int {
 						return 503
 					},
-				)
+				),
+			)
 
 			val, ok := r.Resolve(errors.New("dial tcp 127.0.0.1: connection refused"))
 			Expect(ok).To(BeTrue())
@@ -96,16 +99,17 @@ var _ = Describe("Registry", func() {
 
 	Describe("Default fallback", func() {
 		It("uses default handler when no other handlers match", func() {
-			r := errkit.New[int]().
-				OnAs(func(_ customError1) int {
+			r := errkit.New(
+				errkit.OnAs(func(_ custom1Error) int {
 					return 100
-				}).
-				Default(func(_ error) int {
+				}),
+				errkit.Default(func(_ error) int {
 					return 500
-				})
+				}),
+			)
 
 			// Совпадение по OnAs
-			val, ok := r.Resolve(customError1{})
+			val, ok := r.Resolve(custom1Error{})
 			Expect(ok).To(BeTrue())
 			Expect(val).To(Equal(100))
 
@@ -116,10 +120,11 @@ var _ = Describe("Registry", func() {
 		})
 
 		It("returns zero value and false when no handlers match and no default is set", func() {
-			r := errkit.New[int]().
-				OnAs(func(_ customError1) int {
+			r := errkit.New(
+				errkit.OnAs(func(_ custom1Error) int {
 					return 100
-				})
+				}),
+			)
 
 			val, ok := r.Resolve(errors.New("unregistered error"))
 			Expect(ok).To(BeFalse())
@@ -129,15 +134,16 @@ var _ = Describe("Registry", func() {
 
 	Describe("Order of evaluation", func() {
 		It("executes the first matching handler in order of declaration", func() {
-			r := errkit.New[string]().
-				OnIs(func(_ error) string {
+			r := errkit.New(
+				errkit.OnIs(func(_ error) string {
 					return "first"
-				}, errSentinel).
-				OnMatch(func(_ error) bool {
+				}, errSentinel),
+				errkit.OnMatch(func(_ error) bool {
 					return true
 				}, func(_ error) string {
 					return "second"
-				})
+				}),
+			)
 
 			val, ok := r.Resolve(errSentinel)
 			Expect(ok).To(BeTrue())
@@ -147,10 +153,11 @@ var _ = Describe("Registry", func() {
 
 	Describe("Handle", func() {
 		It("returns mapped value and nil error on successful resolution", func() {
-			r := errkit.New[int]().
-				OnIs(func(_ error) int {
+			r := errkit.New(
+				errkit.OnIs(func(_ error) int {
 					return 400
-				}, errSentinel)
+				}, errSentinel),
+			)
 
 			val, err := r.Handle(errSentinel)
 			Expect(err).NotTo(HaveOccurred())
@@ -158,10 +165,11 @@ var _ = Describe("Registry", func() {
 		})
 
 		It("returns zero value and the original error when unresolved", func() {
-			r := errkit.New[int]().
-				OnIs(func(_ error) int {
+			r := errkit.New(
+				errkit.OnIs(func(_ error) int {
 					return 400
-				}, errSentinel)
+				}, errSentinel),
+			)
 
 			unhandledErr := errors.New("unhandled error")
 			val, err := r.Handle(unhandledErr)
