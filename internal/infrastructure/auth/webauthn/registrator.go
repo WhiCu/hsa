@@ -84,6 +84,7 @@ func (r *Registrator) Begin(ctx context.Context, candidateUserID user.UserID, in
 		}),
 	)
 	if err != nil {
+		// uncovered: internal crypto/rand failure is practically untestable without deep mocking of go-webauthn
 		r.log.ErrorContext(ctx, "failed to begin webauthn registration",
 			slog.String("user_id", candidateUserID.String()),
 			slog.String("invite_id", inviteID.String()),
@@ -108,6 +109,7 @@ func (r *Registrator) Begin(ctx context.Context, candidateUserID user.UserID, in
 
 	optsJSON, err := json.Marshal(options)
 	if err != nil {
+		// uncovered: options struct returned by go-webauthn is strictly JSON-marshallable by design
 		r.log.ErrorContext(ctx, "failed to marshal webauthn options",
 			slog.String("user_id", candidateUserID.String()),
 			slog.String("invite_id", inviteID.String()),

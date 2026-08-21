@@ -108,5 +108,24 @@ var _ = Describe("Authenticator", func() {
 			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
 			Expect(res.UserID).To(Equal(uuid.Nil))
 		})
+
+		It("fails when session decoding succeeds but ValidatePasskeyLogin fails", func(ctx SpecContext) {
+			codec.EXPECT().Decode(testChallengeToken, mock.Anything).Return(nil).Once()
+			// A syntactically valid JSON that parses but fails during validation due to missing/invalid fields
+			invalidResponse := []byte(`{
+                "id": "YWJj",
+                "rawId": "YWJj",
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": "eyJjaGFsbGVuZ2UiOiAiY2hhbGxlbmdlIiwgIm9yaWdpbiI6ICJvcmlnaW4iLCAidHlwZSI6ICJ3ZWJhdXRobi5nZXQifQ==",
+                    "authenticatorData": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    "signature": "c2lnbmF0dXJl"
+                }
+            }`)
+			res, err := auth.Finish(ctx, testChallengeToken, invalidResponse)
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(webauthnadapter.ErrChallengeExpired))
+			Expect(res.UserID).To(Equal(uuid.Nil))
+		})
 	})
 })
