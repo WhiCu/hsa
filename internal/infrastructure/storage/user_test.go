@@ -28,7 +28,7 @@ var _ = Describe("UserRepository", func() {
 
 		do.OverrideValue(injector, logger.NewNOPSlog())
 		do.OverrideValue(injector, globalConfig)
-		do.OverrideValue(injector, context.Background())
+		do.OverrideValue[context.Context](injector, ctx)
 
 		// 2. Резолвим зависимости
 		var err error

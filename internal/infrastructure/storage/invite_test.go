@@ -31,7 +31,7 @@ var _ = Describe("InviteRepository", func() {
 	BeforeEach(func(ctx SpecContext) {
 		injector = do.New(storage.Package)
 
-		do.OverrideValue(injector, context.Background())
+		do.OverrideValue[context.Context](injector, ctx)
 		do.OverrideValue(injector, logger.NewNOPSlog())
 		do.OverrideValue(injector, globalConfig)
 

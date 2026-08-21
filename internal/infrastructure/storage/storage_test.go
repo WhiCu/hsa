@@ -61,12 +61,12 @@ var _ = Describe("Storage", func() {
 		srg      *storage.Storage
 	)
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		injector = do.New(storage.Package)
 
 		do.OverrideValue(injector, logger.NewNOPSlog())
 		do.OverrideValue(injector, globalConfig)
-		do.OverrideValue(injector, context.Background())
+		do.OverrideValue[context.Context](injector, ctx)
 
 		var err error
 		srg, err = do.Invoke[*storage.Storage](injector)
