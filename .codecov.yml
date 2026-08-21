@@ -11,3 +11,5 @@ coverage:
 ignore:
   - "**/mocks/**"
   - "**/api/**"
+  - "**/cmd/**"
+  - "**/pg/**"
