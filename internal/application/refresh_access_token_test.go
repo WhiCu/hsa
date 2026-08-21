@@ -63,14 +63,14 @@ var _ = Describe("RefreshAccessToken", func() {
 
 		injector = do.New(application.Package)
 
-		do.OverrideValue[application.RefreshTokenFinder](injector, sessionFinder)
-		do.OverrideValue[application.RefreshTokenSaver](injector, sessionSaver)
-		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
-		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
-		do.OverrideValue[application.HashGenerator](injector, hasher)
-		do.OverrideValue[application.IDGenerator](injector, ids)
-		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
-		do.OverrideValue[application.Transactor](injector, transactor)
+		do.OverrideValue(injector, sessionFinder)
+		do.OverrideValue(injector, sessionSaver)
+		do.OverrideValue(injector, accessTokens)
+		do.OverrideValue(injector, refreshTokens)
+		do.OverrideValue(injector, hasher)
+		do.OverrideValue(injector, ids)
+		do.OverrideValue(injector, revokeSessions)
+		do.OverrideValue(injector, transactor)
 
 		do.OverrideValue(injector, logger.NewNOPSlog())
 		do.OverrideValue(injector, application.Config{

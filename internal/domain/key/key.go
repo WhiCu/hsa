@@ -27,6 +27,20 @@ const (
 	ScopeDecoy
 )
 
+func ScopeToString(s Scope) string {
+	if s == ScopeMain {
+		return "main"
+	}
+	return "decoy"
+}
+
+func ScopeFromString(s string) Scope {
+	if s == "main" {
+		return ScopeMain
+	}
+	return ScopeDecoy
+}
+
 func (s Scope) Valid() bool { return s == ScopeMain || s == ScopeDecoy }
 
 type WrappedKey struct {

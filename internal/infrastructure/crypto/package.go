@@ -61,7 +61,6 @@ func newAccessTokenVerifier(i do.Injector) (*AccessTokenVerifier, error) {
 		return nil, fmt.Errorf("crypto: invoke config: %w", err)
 	}
 
-	// 1. Если задан явный публичный ключ — парсим его
 	if cfg.PASETO.PublicKey != "" {
 		pubKey, errkey := paseto.NewV4AsymmetricPublicKeyFromHex(cfg.PASETO.PublicKey)
 		if errkey != nil {
@@ -70,7 +69,6 @@ func newAccessTokenVerifier(i do.Injector) (*AccessTokenVerifier, error) {
 		return NewAccessTokenVerifier(pubKey), nil
 	}
 
-	// 2. Иначе автоматически выводим публичный ключ из секретного ключа
 	secretKey, err := paseto.NewV4AsymmetricSecretKeyFromHex(cfg.PASETO.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: derive paseto public key from secret key: %w", err)

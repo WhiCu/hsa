@@ -1,0 +1,590 @@
+openapi: 3.0.3
+info:
+  title: Auth Service (passkey / WebAuthn)
+  description: >
+    Сервис аутентификации на базе WebAuthn/passkey с peer-invite регистрацией
+    и refresh-сессиями. Пароли и логины не используются.
+    WebAuthn-объекты передаются как непрозрачный json.RawMessage.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8081
+
+tags:
+  - name: Invites
+  - name: Registration
+  - name: Login
+  - name: Sessions
+  - name: Credentials
+  - name: Admin
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: PASETO
+      description: Access-токен PASETO v4.public. Полезная нагрузка - user_id и exp.
+
+  parameters:
+    SessionIdPath:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор refresh-сессии
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор пользователя
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - INVITE_NOT_FOUND
+                - INVITE_EXPIRED
+                - INVITE_ALREADY_USED
+                - INVITE_LIMIT_EXCEEDED
+                - WRAPPED_KEYS_REQUIRED
+                - CHALLENGE_EXPIRED
+                - CREDENTIAL_NOT_FOUND
+                - CREDENTIAL_REVOKED           
+                - CREDENTIAL_CLONE_SUSPECTED  
+                - REFRESH_TOKEN_NOT_FOUND
+                - REFRESH_TOKEN_INVALID
+                - REFRESH_TOKEN_REUSE_DETECTED
+                - SESSION_NOT_FOUND
+                - SESSION_FORBIDDEN
+                - INTERNAL_ERROR
+            message:
+              type: string
+      example:
+        error:
+          code: INVITE_EXPIRED
+          message: invite code has expired
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken:
+          type: string
+          description: PASETO v4.public
+        refreshToken:
+          type: string
+          description: Opaque-секрет. Сервер хранит только его хэш.
+
+    Invite:
+      type: object
+      required: [code, expiresAt]
+      properties:
+        code:
+          type: string
+          description: Сырой инвайт-код (возвращается один раз)
+        expiresAt:
+          type: string
+          format: date-time
+
+    WrappedKeyScope:
+      type: string
+      enum: [main, decoy]
+
+    WrappedKeyInput:
+      type: object
+      required: [scope, wrappedDek, wrapAlgorithm]
+      properties:
+        scope:
+          $ref: '#/components/schemas/WrappedKeyScope'
+        wrappedDek:
+          type: string
+          format: byte
+          description: Base64 блоб
+        wrapAlgorithm:
+          type: string
+          example: xchacha20poly1305-prf-kek
+
+    WrappedKeyOutput:
+      type: object
+      required: [scope, wrappedDek, wrapAlgorithm]
+      properties:
+        scope:
+          $ref: '#/components/schemas/WrappedKeyScope'
+        wrappedDek:
+          type: string
+          format: byte
+          description: Base64 блоб - сервер отдаёт как есть, никогда не расшифровывает
+        wrapAlgorithm:
+          type: string
+          example: xchacha20poly1305-prf-kek
+
+    WebAuthnCreationOptions:
+      x-go-type: json.RawMessage
+      x-go-type-import:
+        path: "encoding/json"
+      description: PublicKeyCredentialCreationOptions
+
+    WebAuthnRequestOptions:
+      x-go-type: json.RawMessage
+      x-go-type-import:
+        path: "encoding/json"
+      description: PublicKeyCredentialRequestOptions
+
+    WebAuthnRegistrationResponse:
+      x-go-type: json.RawMessage
+      x-go-type-import:
+        path: "encoding/json"
+      description: Результат navigator.credentials.create()
+
+    WebAuthnAuthenticationResponse:
+      x-go-type: json.RawMessage
+      x-go-type-import:
+        path: "encoding/json"
+      description: Результат navigator.credentials.get()
+
+  responses:
+    BadRequest:
+      description: Неверный запрос (ошибка валидации или некорректное тело запроса)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: invalid request payload
+
+    Unauthorized:
+      description: Не авторизован (токен отсутствует, недействителен, истёк, либо credential отозван/скомпрометирован)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missingToken:
+              summary: Токен отсутствует или недействителен
+              value:
+                error:
+                  code: UNAUTHORIZED
+                  message: authentication required
+            challengeExpired:
+              summary: WebAuthn challenge истёк или подделан
+              value:
+                error:
+                  code: CHALLENGE_EXPIRED
+                  message: webauthn challenge expired or invalid
+            credentialNotFound:
+              summary: Credential не зарегистрирован
+              value:
+                error:
+                  code: CREDENTIAL_NOT_FOUND
+                  message: credential not found
+            credentialRevoked:
+              summary: Credential отозван
+              value:
+                error:
+                  code: CREDENTIAL_REVOKED
+                  message: credential has been revoked
+            credentialCloneSuspected:
+              summary: Обнаружено клонирование - все сессии пользователя отозваны
+              value:
+                error:
+                  code: CREDENTIAL_CLONE_SUSPECTED
+                  message: credential clone suspected, all sessions revoked
+            refreshTokenInvalid:
+              summary: Refresh-токен истёк, не найден или отозван
+              value:
+                error:
+                  code: REFRESH_TOKEN_INVALID
+                  message: refresh token expired or revoked
+            refreshTokenReuse:
+              summary: Обнаружен повторный вход по уже использованному refresh-токену
+              value:
+                error:
+                  code: REFRESH_TOKEN_REUSE_DETECTED
+                  message: refresh token reuse detected, all sessions revoked
+    Forbidden:
+      description: Доступ запрещен (недостаточно прав)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FORBIDDEN
+              message: access forbidden
+
+    NotFound:
+      description: Запрашиваемый ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            inviteNotFound:
+              summary: Инвайт не найден
+              value:
+                error:
+                  code: INVITE_NOT_FOUND
+                  message: invite not found
+            sessionNotFound:
+              summary: Сессия не найдена
+              value:
+                error:
+                  code: SESSION_NOT_FOUND
+                  message: refresh session not found
+            userNotFound:
+              summary: Пользователь не найден
+              value:
+                error:
+                  code: NOT_FOUND
+                  message: user not found
+
+    Conflict:
+      description: Конфликт состояния ресурса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            inviteAlreadyUsed:
+              summary: Инвайт уже погашен
+              value:
+                error:
+                  code: INVITE_ALREADY_USED
+                  message: invite code already used
+            inviteLimitExceeded:
+              summary: Превышен лимит активных инвайтов
+              value:
+                error:
+                  code: INVITE_LIMIT_EXCEEDED
+                  message: active invite limit exceeded
+
+    InternalError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: internal server error
+
+paths:
+  # ──────────────────────────────────────────────────────────────
+  # Invites
+  # ──────────────────────────────────────────────────────────────
+  /invites:
+    post:
+      tags: [Invites]
+      summary: Создать инвайт-код
+      description: >
+        Создаёт инвайт от лица текущего авторизованного пользователя.
+        UserID берётся из Bearer токена (PASETO) в middleware.
+      security: [{ BearerAuth: [] }]
+      responses:
+        '201':
+          description: Инвайт создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ──────────────────────────────────────────────────────────────
+  # Registration
+  # ──────────────────────────────────────────────────────────────
+  /registration/begin:
+    post:
+      tags: [Registration]
+      summary: Начать регистрацию по инвайт-коду
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteCode]
+              properties:
+                inviteCode:
+                  type: string
+      responses:
+        '200':
+          description: WebAuthn challenge сгенерирован
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeToken, creationOptions]
+                properties:
+                  challengeToken:
+                    type: string
+                  creationOptions:
+                    $ref: '#/components/schemas/WebAuthnCreationOptions'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /registration/complete:
+    post:
+      tags: [Registration]
+      summary: Завершить регистрацию
+      description: >
+        Завершает регистрацию. IP-адрес извлекается из HTTP-запроса на уровне хендлера.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeToken, registrationResponse, wrappedKeys]
+              properties:
+                challengeToken:
+                  type: string
+                registrationResponse:
+                  $ref: '#/components/schemas/WebAuthnRegistrationResponse'
+                wrappedKeys:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/WrappedKeyInput'
+                deviceInfo:
+                  type: string
+      responses:
+        '201':
+          description: Пользователь зарегистрирован, сессия выдана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+
+  # ──────────────────────────────────────────────────────────────
+  # Auth
+  # ──────────────────────────────────────────────────────────────
+  /auth/verify:
+    get:
+      operationId: AuthVerifyGet
+      summary: Проверить access token
+      description: Проверяет Bearer access token для Traefik ForwardAuth.
+      security: [{ BearerAuth: [] }]
+      responses:
+        '204':
+          description: Access token valid
+          headers:
+            X-Auth-User:
+              required: true
+              schema:
+                type: string
+                format: uuid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ──────────────────────────────────────────────────────────────
+  # Login
+  # ──────────────────────────────────────────────────────────────
+  /login/begin:
+    post:
+      tags: [Login]
+      summary: Начать вход
+      responses:
+        '200':
+          description: WebAuthn challenge сгенерирован
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeToken, requestOptions]
+                properties:
+                  challengeToken:
+                    type: string
+                  requestOptions:
+                    $ref: '#/components/schemas/WebAuthnRequestOptions'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /login:
+    post:
+      tags: [Login]
+      summary: Завершить вход
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeToken, authenticationResponse]
+              properties:
+                challengeToken:
+                  type: string
+                authenticationResponse:
+                  $ref: '#/components/schemas/WebAuthnAuthenticationResponse'
+                deviceInfo:
+                  type: string
+      responses:
+        '200':
+          description: Вход выполнен, сессия выдана
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokenPair, wrappedKeys]
+                properties:
+                  tokenPair:
+                    $ref: '#/components/schemas/TokenPair'
+                  wrappedKeys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WrappedKeyOutput'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ──────────────────────────────────────────────────────────────
+  # Sessions
+  # ──────────────────────────────────────────────────────────────
+  /token/refresh:
+    post:
+      tags: [Sessions]
+      summary: Обновить access-токен
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Токены обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}:
+    delete:
+      tags: [Sessions]
+      summary: Выйти с конкретного устройства
+      description: Отзыв конкретной сессии по её ID.
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SessionIdPath'
+      responses:
+        '204':
+          description: Сессия отозвана
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ──────────────────────────────────────────────────────────────
+  # Credentials
+  # ──────────────────────────────────────────────────────────────
+  # /credentials/begin:
+  #   post:
+  #     tags: [Credentials]
+  #     summary: Начать добавление нового устройства
+  #     security: [{ BearerAuth: [] }]
+  #     responses:
+  #       '200':
+  #         description: WebAuthn challenge сгенерирован
+  #         content:
+  #           application/json:
+  #             schema:
+  #               type: object
+  #               required: [challengeToken, creationOptions]
+  #               properties:
+  #                 challengeToken:
+  #                   type: string
+  #                 creationOptions:
+  #                   $ref: '#/components/schemas/WebAuthnCreationOptions'
+  #       '401':
+  #         $ref: '#/components/responses/Unauthorized'
+  #       '500':
+  #         $ref: '#/components/responses/InternalError'
+
+  # ──────────────────────────────────────────────────────────────
+  # Admin
+  # ──────────────────────────────────────────────────────────────
+  /admin/users/{userId}/revoke-chain:
+    post:
+      tags: [Admin]
+      summary: Каскадный отзыв сессий по цепочке приглашений
+      security: [{ BearerAuth: [admin] }]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '204':
+          description: Сессии всей ветки отозваны
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
