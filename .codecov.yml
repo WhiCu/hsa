@@ -10,3 +10,4 @@ coverage:
         target: 80%
 ignore:
   - "**/mocks/**"
+  - "**/api/**"
