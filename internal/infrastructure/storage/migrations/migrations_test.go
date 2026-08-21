@@ -1,7 +1,6 @@
 package migrations_test
 
 import (
-	"context"
 	"database/sql"
 	"database/sql/driver"
 	"io"
@@ -78,13 +77,13 @@ func init() {
 
 func TestReset_DummyDB_Coverage(t *testing.T) {
 	db, _ := sql.Open("dummy2", "")
-	err := migrations.Reset(context.Background(), db)
+	err := migrations.Reset(t.Context(), db)
 	assert.NoError(t, err)
 }
 
-func TestUp_DummyDB_Coverage(_ *testing.T) {
+func TestUp_DummyDB_Coverage(t *testing.T) {
 	db, _ := sql.Open("dummy2", "")
-	err := migrations.Up(context.Background(), db)
+	err := migrations.Up(t.Context(), db)
 	// It'll probably fail internally somewhere but should cover our function up to goose calls
 	_ = err
 }
@@ -92,7 +91,7 @@ func TestUp_DummyDB_Coverage(_ *testing.T) {
 func TestReset_EmptyDB_Coverage(t *testing.T) {
 	sql.Register("emptyDB", emptyDriver{})
 	db, _ := sql.Open("emptyDB", "")
-	err := migrations.Reset(context.Background(), db)
+	err := migrations.Reset(t.Context(), db)
 	assert.NoError(t, err)
 }
 
@@ -142,7 +141,7 @@ func (r *emptyRows) Next(_ []driver.Value) error {
 func TestReset_ErrorDB_Coverage(t *testing.T) {
 	sql.Register("errorDB", errorDriver{})
 	db, _ := sql.Open("errorDB", "")
-	err := migrations.Reset(context.Background(), db)
+	err := migrations.Reset(t.Context(), db)
 	assert.Error(t, err)
 }
 

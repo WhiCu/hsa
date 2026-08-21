@@ -1,7 +1,6 @@
 package logger_test
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,14 +29,14 @@ var _ = Describe("Logger Package", func() {
 	})
 
 	Context("NOP Logger", func() {
-		It("provides a handler that ignores everything", func() {
+		It("provides a handler that ignores everything", func(ctx SpecContext) {
 			handler := logger.NewNOPHandler()
 
-			Expect(handler.Enabled(context.Background(), slog.LevelDebug)).To(BeFalse())
-			Expect(handler.Enabled(context.Background(), slog.LevelInfo)).To(BeFalse())
-			Expect(handler.Enabled(context.Background(), slog.LevelError)).To(BeFalse())
+			Expect(handler.Enabled(ctx, slog.LevelDebug)).To(BeFalse())
+			Expect(handler.Enabled(ctx, slog.LevelInfo)).To(BeFalse())
+			Expect(handler.Enabled(ctx, slog.LevelError)).To(BeFalse())
 
-			Expect(handler.Handle(context.Background(), slog.Record{})).To(Succeed())
+			Expect(handler.Handle(ctx, slog.Record{})).To(Succeed())
 
 			hWithAttrs := handler.WithAttrs([]slog.Attr{{Key: "k", Value: slog.StringValue("v")}})
 			Expect(hWithAttrs).To(Equal(handler))

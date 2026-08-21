@@ -7,3 +7,8 @@
 **Pattern/Issue:** Incomplete test coverage (50%) for the `session` domain entity, missing testing for simple getters, token rotation (`Rotate`), struct reconstruction (`Reconstruct`), and invalid IP validation edge case.
 **Learning:** Even trivial logic like getters and manual structure reconstruction functions require testing to meet Codecov requirements (80% diff hit threshold). Tests should also fully exhaust validation pathways.
 **Prevention:** Always write comprehensive Ginkgo specs to test newly added methods and structs, no matter how simple they might seem, especially simple domain entity operations. Include boundary condition testing like invalid initializations (e.g., zero `netip.Addr`).
+## 2025-02-21 - [Modernization] Outdated context.Background() usage
+
+**Pattern/Issue:** Many Ginkgo specs in the `storage` and `logger` packages were manually overriding DI containers or injecting `context.Background()` instead of utilizing the test-bound contexts.
+**Learning:** `t.Context()` (Go 1.24+) or Ginkgo's native test context (`SpecContext`) are strictly better as they natively cancel when the test finishes, reducing the chance of goroutine leaks.
+**Prevention:** In Ginkgo specs, use `ctx SpecContext` and pass it directly to `do.OverrideValue[context.Context](injector, ctx)`. For standard `testing.T` tests, use `t.Context()`.
