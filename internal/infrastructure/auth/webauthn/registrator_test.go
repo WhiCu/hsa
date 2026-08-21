@@ -114,12 +114,12 @@ var _ = Describe("Registrator", func() {
 		It("fails when session decoding succeeds but CreateCredential fails", func(ctx SpecContext) {
 			codec.EXPECT().Decode(testChallengeToken, mock.Anything).Return(nil).Once()
 			invalidResponse := []byte(`{
-                "id": "abc",
+                "id": "YWJj",
                 "rawId": "YWJj",
                 "type": "public-key",
                 "response": {
                     "clientDataJSON": "eyJjaGFsbGVuZ2UiOiAiY2hhbGxlbmdlIiwgIm9yaWdpbiI6ICJvcmlnaW4iLCAidHlwZSI6ICJ3ZWJhdXRobi5jcmVhdGUifQ==",
-                    "attestationObject": "YXR0ZXN0YXRpb25PYmplY3Q="
+                    "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oKhhdXRoRGF0YVglSZYN5YgOjGh0NBcPZHYgW4/krrmihjLHmVzzuoMdl2NBAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
                 }
             }`)
 			res, err := reg.Finish(ctx, testChallengeToken, invalidResponse)

@@ -56,6 +56,7 @@ func (a *Authenticator) Begin(ctx context.Context) (string, []byte, error) {
 		gowebauthn.WithUserVerification(protocol.VerificationRequired),
 	)
 	if err != nil {
+		// uncovered: internal crypto/rand failure is practically untestable without deep mocking of go-webauthn
 		a.log.ErrorContext(ctx, "failed to begin webauthn discoverable login", slog.Any("error", err))
 		return "", nil, err
 	}
@@ -68,6 +69,7 @@ func (a *Authenticator) Begin(ctx context.Context) (string, []byte, error) {
 
 	optsJSON, err := json.Marshal(options)
 	if err != nil {
+		// uncovered: options struct returned by go-webauthn is strictly JSON-marshallable by design
 		a.log.ErrorContext(ctx, "failed to marshal webauthn login options", slog.Any("error", err))
 		return "", nil, err
 	}
