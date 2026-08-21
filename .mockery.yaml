@@ -15,3 +15,16 @@ packages:
     config:
       all: true
       pkgname: "mocks"
+  
+  github.com/whicu/hsa/internal/presentation/http:
+    config:
+      all: true
+      pkgname: "mocks"
+  
+  github.com/whicu/hsa/api/http:
+    config:
+      dir: "{{.ConfigDir}}/internal/presentation/http/mocks"
+      pkgname: mocks
+      include-auto-generated: true
+    interfaces:
+      SecurityHandler:

@@ -56,7 +56,7 @@ package telemetry
 // }
 
 // // - inflight gauge   — сколько запросов обрабатывается прямо сейчас
-// // - duration histogram — время выполнения в секундах
+// - duration histogram — время выполнения в секундах
 // // - requests counter  — общее число вызовов с разбивкой по success/error
 // type Metrics struct {
 // 	inflight metric.Int64UpDownCounter
