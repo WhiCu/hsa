@@ -81,8 +81,14 @@ func resolvePath(def string) (string, error) {
 
 func DumpFlat(k *koanf.Koanf) string {
 	var sb strings.Builder
-	for key, value := range k.All() {
-		fmt.Fprintf(&sb, "%s = %v\n", key, value)
+	for _, key := range k.Keys() {
+		value := k.Get(key)
+		lowerKey := strings.ToLower(key)
+		if strings.Contains(lowerKey, "secret") || strings.Contains(lowerKey, "key") || strings.Contains(lowerKey, "pass") || strings.Contains(lowerKey, "token") {
+			fmt.Fprintf(&sb, "%s = ***REDACTED***\n", key)
+		} else {
+			fmt.Fprintf(&sb, "%s = %v\n", key, value)
+		}
 	}
 	return sb.String()
 }
