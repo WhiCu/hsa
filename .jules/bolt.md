@@ -7,3 +7,7 @@
 ## 2025-02-23 - [Optimizing fmt.Sprintf reflection on hot panic recovery paths]
 **Learning:** `fmt.Sprintf` uses reflection to format arguments, which causes significant overhead and memory allocations. In hot code paths, such as generic panic recovery where values are predominantly of type `error` or `string`, using type assertions (`val.(error)` or `val.(string)`) combined with simple string concatenation is much faster.
 **Action:** Replace `fmt.Sprintf` with type assertions and concatenation for common types before falling back to `fmt.Sprintf` when dealing with untyped (`any`) variables in hot paths to boost performance and reduce allocations.
+
+## 2025-02-23 - [Optimize string splitting in loops]
+**Learning:** `strings.Split` allocates a new slice containing all split segments. In performance-critical hot paths like HTTP middleware where headers are parsed (e.g., `X-Forwarded-For`), splitting strings and iterating with `slices.Backward` adds unnecessary allocation and GC pressure.
+**Action:** Use manual right-to-left string parsing with `strings.LastIndexByte` instead of `strings.Split` when searching or iterating backwards over a comma-separated list to prevent temporary slice allocations.
