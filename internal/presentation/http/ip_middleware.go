@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
-	"slices"
 	"strings"
 )
 
@@ -76,7 +75,22 @@ func firstUntrustedFromRight(
 	value string,
 	trusted []netip.Prefix,
 ) (netip.Addr, bool) {
-	for _, part := range slices.Backward(strings.Split(value, ",")) {
+	// ⚡ Bolt: Replaced strings.Split with zero-allocation backward string slicing using strings.LastIndexByte.
+	// This is a hot path executed on every request.
+	for {
+		if value == "" {
+			break
+		}
+
+		var part string
+		if i := strings.LastIndexByte(value, ','); i >= 0 {
+			part = value[i+1:]
+			value = value[:i]
+		} else {
+			part = value
+			value = ""
+		}
+
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
