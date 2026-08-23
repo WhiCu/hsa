@@ -13,3 +13,7 @@ ignore:
   - "**/api/**"
   - "**/cmd/**"
   - "**/pg/**"
+  - "**/*.pb.go"
+  - "**/*.gen.go"
+  - "**/*_gen.go"
+  - "internal/infrastructure/telemetry/**"
