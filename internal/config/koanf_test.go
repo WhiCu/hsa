@@ -169,7 +169,7 @@ var _ = Describe("Config", func() {
 		})
 
 		It("should dump flat config correctly", func() {
-			err := os.WriteFile(tempFile, []byte("key: value"), 0644)
+			err := os.WriteFile(tempFile, []byte("some_field: value"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			k, err := config.NewKoanf(tempFile)
@@ -177,7 +177,22 @@ var _ = Describe("Config", func() {
 			Expect(k).NotTo(BeNil())
 
 			dump := config.DumpFlat(k)
-			Expect(dump).To(ContainSubstring("key = value"))
+			Expect(dump).To(ContainSubstring("some_field = value"))
+		})
+
+		It("should redact sensitive keys in dump flat config", func() {
+			err := os.WriteFile(tempFile, []byte("secret_field: secret123\nnormal_key: pass_123\ntoken_field: abc\npassword: 123"), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k).NotTo(BeNil())
+
+			dump := config.DumpFlat(k)
+			Expect(dump).To(ContainSubstring("secret_field = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("normal_key = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("token_field = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("password = ***REDACTED***"))
 		})
 	})
 
