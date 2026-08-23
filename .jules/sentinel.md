@@ -22,3 +22,8 @@
 **Vulnerability:** The infrastructure `crypto.Config` (and `crypto.PASETOConfig`) contained sensitive keys such as `HMACSecret`, `SymmetricKey`, `SecretKey`, and `PublicKey`. These configurations could implicitly leak sensitive credentials in plaintext if inadvertently logged using struct formatters (like `%+v` or `slog.Any`), since they lacked a `String()` method.
 **Learning:** Structures containing configuration values are just as vulnerable to log-leakage as application or domain entities. Any configuration struct holding cryptographic secrets must explicitly implement `String()`.
 **Prevention:** Always implement a `String()` method with a `// SECURITY: never log this field` comment on configuration structs that contain keys, redacting those sensitive fields using `***REDACTED***`.
+
+## 2025-10-24 - [HIGH] Fix sensitive data leak in config DumpFlat
+**Vulnerability:** The `DumpFlat` utility iterated over all configuration keys and indiscriminately printed their values. This leaked sensitive credentials (like `storage.pass`, `crypto.hmac_secret`, `crypto.paseto.symmetric_key`) in plaintext when the config view was invoked.
+**Learning:** Utilities that dynamically format and output configuration data (or dictionaries in general) must account for the presence of sensitive values, particularly because configuration structures often contain raw secrets before they are marshaled into objects with custom `String()` redaction.
+**Prevention:** Implement proactive filtering based on keywords (such as `secret`, `key`, `pass`, `token`) for generic printing tools that iterate over configuration maps.

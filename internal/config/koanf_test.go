@@ -168,8 +168,17 @@ var _ = Describe("Config", func() {
 			os.Remove(tempFile)
 		})
 
-		It("should dump flat config correctly", func() {
-			err := os.WriteFile(tempFile, []byte("key: value"), 0644)
+		It("should dump flat config correctly and redact sensitive fields", func() {
+			yamlContent := `
+safe_field: visible_value
+my_secret: hidden_value
+database_pass: password123
+api_key: some_api_key
+auth_token: bearer_token_abc
+nested:
+  pass: nested_password
+`
+			err := os.WriteFile(tempFile, []byte(yamlContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			k, err := config.NewKoanf(tempFile)
@@ -177,7 +186,18 @@ var _ = Describe("Config", func() {
 			Expect(k).NotTo(BeNil())
 
 			dump := config.DumpFlat(k)
-			Expect(dump).To(ContainSubstring("key = value"))
+			Expect(dump).To(ContainSubstring("safe_field = visible_value"))
+			Expect(dump).To(ContainSubstring("my_secret = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("database_pass = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("api_key = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("auth_token = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("nested.pass = ***REDACTED***"))
+
+			Expect(dump).NotTo(ContainSubstring("hidden_value"))
+			Expect(dump).NotTo(ContainSubstring("password123"))
+			Expect(dump).NotTo(ContainSubstring("some_api_key"))
+			Expect(dump).NotTo(ContainSubstring("bearer_token_abc"))
+			Expect(dump).NotTo(ContainSubstring("nested_password"))
 		})
 	})
 
