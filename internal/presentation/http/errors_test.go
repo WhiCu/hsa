@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"testing"
+
 	"github.com/stretchr/testify/require"
 	api "github.com/whicu/hsa/api/http"
 	"github.com/whicu/hsa/internal/application"
