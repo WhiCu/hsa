@@ -77,11 +77,7 @@ func firstUntrustedFromRight(
 ) (netip.Addr, bool) {
 	// ⚡ Bolt: Replaced strings.Split with zero-allocation backward string slicing using strings.LastIndexByte.
 	// This is a hot path executed on every request.
-	for {
-		if value == "" {
-			break
-		}
-
+	for value != "" {
 		var part string
 		if i := strings.LastIndexByte(value, ','); i >= 0 {
 			part = value[i+1:]
