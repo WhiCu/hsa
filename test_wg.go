@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
-	var wg sync.WaitGroup
-	wg.Go(func() {
+	var eg errgroup.Group
+	eg.Go(func() error {
 		fmt.Println("Hello")
+        return nil
 	})
-	wg.Wait()
+	_ = eg.Wait()
 }
