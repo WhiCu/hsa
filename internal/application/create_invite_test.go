@@ -285,9 +285,7 @@ var _ = Describe("CreateInvite", func() {
 
 			for range concurrentRequests {
 				readyWg.Add(1)
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					readyWg.Done() // Сигнализируем, что горутина готова к запуску
 					<-startGate
 					_, _, err := uc.Execute(ctx, createdBy)
@@ -296,7 +294,7 @@ var _ = Describe("CreateInvite", func() {
 					} else if errors.Is(err, invite.ErrTooManyActive) {
 						atomic.AddInt32(&failCount, 1)
 					}
-				}()
+				})
 			}
 
 			// Гарантированно дожидаемся, пока все горутины будут готовы
