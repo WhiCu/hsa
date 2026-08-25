@@ -109,7 +109,9 @@ var _ = Describe("Handler", func() {
 	mockAuthUnauthorized := func() {
 		mocks.SecurityHandler.EXPECT().
 			HandleBearerAuth(mock.Anything, mock.Anything, mock.Anything).
-			Return(context.Background(), internalHTTP.ErrUnauthenticated).
+			RunAndReturn(func(ctx context.Context, _ api.OperationName, _ api.BearerAuth) (context.Context, error) {
+				return ctx, internalHTTP.ErrUnauthenticated
+			}).
 			Maybe()
 	}
 

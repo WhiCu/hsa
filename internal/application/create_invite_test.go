@@ -280,10 +280,13 @@ var _ = Describe("CreateInvite", func() {
 				}).Maybe()
 
 			var wg sync.WaitGroup
+			var readyWg sync.WaitGroup
 			startGate := make(chan struct{})
 
 			for range concurrentRequests {
+				readyWg.Add(1)
 				wg.Go(func() {
+					readyWg.Done() // Сигнализируем, что горутина готова к запуску
 					<-startGate
 					_, _, err := uc.Execute(ctx, createdBy)
 					if err == nil {
@@ -294,8 +297,8 @@ var _ = Describe("CreateInvite", func() {
 				})
 			}
 
-			// Даем горутинам время подготовиться
-			time.Sleep(5 * time.Millisecond)
+			// Гарантированно дожидаемся, пока все горутины будут готовы
+			readyWg.Wait()
 
 			// Запускаем все запросы одновременно!
 			close(startGate)

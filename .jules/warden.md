@@ -12,3 +12,12 @@
 **Pattern/Issue:** Many Ginkgo specs in the `storage` and `logger` packages were manually overriding DI containers or injecting `context.Background()` instead of utilizing the test-bound contexts.
 **Learning:** `t.Context()` (Go 1.24+) or Ginkgo's native test context (`SpecContext`) are strictly better as they natively cancel when the test finishes, reducing the chance of goroutine leaks.
 **Prevention:** In Ginkgo specs, use `ctx SpecContext` and pass it directly to `do.OverrideValue[context.Context](injector, ctx)`. For standard `testing.T` tests, use `t.Context()`.
+## 2025-02-21 - [Flaky Test] Non-deterministic time.Sleep synchronization
+**Pattern/Issue:** In `internal/application/create_invite_test.go`, tests verifying concurrency control used `time.Sleep(5 * time.Millisecond)` to "give goroutines time to prepare" before starting the benchmark.
+**Learning:** Wall-clock synchronization is inherently flaky in CI. The correct idiomatic approach is to use a `readyWg sync.WaitGroup` that blocks the main test thread until all worker goroutines have called `readyWg.Done()` right before blocking on the `startGate` channel.
+**Prevention:** Never use `time.Sleep` to coordinate goroutine startup in tests. Always use a dedicated wait group or channel signaling pattern to guarantee deterministic synchronization.
+
+## 2025-02-21 - [Modernization] Context swallowed by testify mock Returns
+**Pattern/Issue:** In `internal/presentation/http/handler_test.go`, the `mockAuthUnauthorized` function was mocking `HandleBearerAuth` by returning `context.Background()` directly using `.Return(context.Background(), err)`.
+**Learning:** Returning a bare background context drops any cancellation signals or values that should logically pass through from the request context.
+**Prevention:** When mocking middleware or security handlers that modify and return a context, use `.RunAndReturn(func(ctx ...) { return ctx, err })` to pass the contextual state correctly, even on failure.
