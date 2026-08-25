@@ -60,14 +60,9 @@ var _ = Describe("Telemetry", func() {
 
 	Context("Initialization", func() {
 		var ctx context.Context
-		var cancel context.CancelFunc
 
 		BeforeEach(func(specCtx SpecContext) {
-			ctx, cancel = context.WithTimeout(specCtx, 2*time.Second)
-		})
-
-		AfterEach(func() {
-			cancel()
+			ctx = specCtx
 		})
 
 		It("initializes connection with insecure", func() {
@@ -209,14 +204,9 @@ var _ = Describe("Telemetry", func() {
 
 	Context("DI Package Wiring", func() {
 		var ctx context.Context
-		var cancel context.CancelFunc
 
 		BeforeEach(func(specCtx SpecContext) {
-			ctx, cancel = context.WithTimeout(specCtx, 5*time.Second)
-		})
-
-		AfterEach(func() {
-			cancel()
+			ctx = specCtx
 		})
 
 		It("provides a nil service when disabled", func() {
