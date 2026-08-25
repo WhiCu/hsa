@@ -16,6 +16,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const (
+	telemetryKey = "telemetry"
+	enabledKey   = "enabled"
+)
+
 var _ = Describe("Telemetry", func() {
 	Context("Configuration", func() {
 		It("loads defaults when no config provided", func() {
@@ -35,8 +40,8 @@ var _ = Describe("Telemetry", func() {
 		It("loads provided configuration", func() {
 			k := koanf.New(".")
 			err := k.Load(confmap.Provider(map[string]any{
-				"telemetry": map[string]any{
-					"enabled": false,
+				telemetryKey: map[string]any{
+					"enabled":      false,
 					"service_name": "test-service",
 				},
 			}, "."), nil)
@@ -57,8 +62,8 @@ var _ = Describe("Telemetry", func() {
 		var ctx context.Context
 		var cancel context.CancelFunc
 
-		BeforeEach(func() {
-			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+		BeforeEach(func(specCtx SpecContext) {
+			ctx, cancel = context.WithTimeout(specCtx, 2*time.Second)
 		})
 
 		AfterEach(func() {
@@ -69,20 +74,20 @@ var _ = Describe("Telemetry", func() {
 			cfg := telemetry.Config{
 				Exporter: telemetry.ExporterConfig{
 					Conn: telemetry.ConnConfig{
-						Endpoint: "localhost:12345",
-						Insecure: true,
+						Endpoint:   "localhost:12345",
+						Insecure:   true,
 						MaxMsgSize: 1024,
 						Compressor: "gzip",
 						KeepAlive: telemetry.KeepAliveConfig{
-							Time: 10 * time.Second,
-							Timeout: 2 * time.Second,
+							Time:                10 * time.Second,
+							Timeout:             2 * time.Second,
 							PermitWithoutStream: true,
 						},
 						Backoff: telemetry.BackoffConfig{
-							BaseDelay: 1 * time.Second,
-							MaxDelay: 5 * time.Second,
+							BaseDelay:  1 * time.Second,
+							MaxDelay:   5 * time.Second,
 							Multiplier: 1.5,
-							Jitter: 0.1,
+							Jitter:     0.1,
 						},
 					},
 				},
@@ -98,16 +103,16 @@ var _ = Describe("Telemetry", func() {
 			cfg := telemetry.Config{
 				Exporter: telemetry.ExporterConfig{
 					Conn: telemetry.ConnConfig{
-						Endpoint: "localhost:12345",
-						Insecure: false, // uses system certs
+						Endpoint:   "localhost:12345",
+						Insecure:   false, // uses system certs
 						Compressor: "",
 						KeepAlive: telemetry.KeepAliveConfig{
-							Time: 10 * time.Second,
+							Time:    10 * time.Second,
 							Timeout: 2 * time.Second,
 						},
 						Backoff: telemetry.BackoffConfig{
-							BaseDelay: 1 * time.Second,
-							MaxDelay: 5 * time.Second,
+							BaseDelay:  1 * time.Second,
+							MaxDelay:   5 * time.Second,
 							Multiplier: 1.5,
 						},
 					},
@@ -122,9 +127,9 @@ var _ = Describe("Telemetry", func() {
 
 		It("initializes resource", func() {
 			cfg := telemetry.Config{
-				ServiceName: "test",
+				ServiceName:    "test",
 				ServiceVersion: "1.0",
-				Environment: "test-env",
+				Environment:    "test-env",
 			}
 			res, err := telemetry.InitResource(ctx, cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -153,7 +158,7 @@ var _ = Describe("Telemetry", func() {
 				func(samplerType string) {
 					cfg := telemetry.Config{
 						Sampler: telemetry.SamplerConfig{
-							Type: samplerType,
+							Type:  samplerType,
 							Ratio: 0.5,
 						},
 						Exporter: telemetry.ExporterConfig{
@@ -206,8 +211,8 @@ var _ = Describe("Telemetry", func() {
 		var ctx context.Context
 		var cancel context.CancelFunc
 
-		BeforeEach(func() {
-			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		BeforeEach(func(specCtx SpecContext) {
+			ctx, cancel = context.WithTimeout(specCtx, 5*time.Second)
 		})
 
 		AfterEach(func() {
@@ -217,8 +222,8 @@ var _ = Describe("Telemetry", func() {
 		It("provides a nil service when disabled", func() {
 			k := koanf.New(".")
 			k.Load(confmap.Provider(map[string]any{
-				"telemetry": map[string]any{
-					"enabled": false,
+				telemetryKey: map[string]any{
+					enabledKey: false,
 				},
 			}, "."), nil)
 
@@ -243,22 +248,22 @@ var _ = Describe("Telemetry", func() {
 
 			k := koanf.New(".")
 			k.Load(confmap.Provider(map[string]any{
-				"telemetry": map[string]any{
-					"enabled": true,
-					"service_name": "test-service",
+				telemetryKey: map[string]any{
+					enabledKey:        true,
+					"service_name":    "test-service",
 					"service_version": "1.0.0",
-					"environment": "dev",
+					"environment":     "dev",
 					"exporter": map[string]any{
 						"conn": map[string]any{
 							"endpoint": listener.Addr().String(),
 							"insecure": true,
 							"keep_alive": map[string]any{
-								"time": "10s",
+								"time":    "10s",
 								"timeout": "2s",
 							},
 							"backoff": map[string]any{
 								"base_delay": "1s",
-								"max_delay": "5s",
+								"max_delay":  "5s",
 							},
 						},
 						"timeout": "1s",
