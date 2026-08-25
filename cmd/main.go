@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -88,8 +89,14 @@ func cmdRun() error {
 			)
 
 			runCfg := di.Config{
-				CfgView:      cmd.Bool("cfg-view"),
-				CountInvites: cmd.Count("count-invites"),
+				CfgView: cmd.Bool("cfg-view"),
+				RootInvites: struct {
+					CountInvites int
+					Out          io.Writer
+				}{
+					CountInvites: cmd.Count("count-invites"),
+					Out:          os.Stdout,
+				},
 			}
 
 			if err := di.Run(ctx, injector, runCfg); err != nil {

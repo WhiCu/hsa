@@ -2,8 +2,11 @@ package di
 
 import (
 	"context"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -22,8 +25,11 @@ import (
 )
 
 type Config struct {
-	CfgView      bool
-	CountInvites int
+	CfgView     bool
+	RootInvites struct {
+		CountInvites int
+		Out          io.Writer
+	}
 }
 
 func New(ctx context.Context, configPath string) *do.RootScope {
@@ -79,8 +85,9 @@ func Run(ctx context.Context, injector *do.RootScope, cfg Config) error {
 		return errBootstrap
 	}
 
-	if cfg.CountInvites > 0 {
-		if errRootInvites := createRootInvites(ctx, injector, root, cfg.CountInvites); errRootInvites != nil {
+	rootCfg := cfg.RootInvites
+	if rootCfg.CountInvites > 0 {
+		if errRootInvites := createRootInvites(ctx, injector, root, rootCfg.CountInvites, rootCfg.Out); errRootInvites != nil {
 			return errRootInvites
 		}
 	}
@@ -129,36 +136,44 @@ func bootstrapRoot(ctx context.Context, injector do.Injector, log *slog.Logger) 
 	return root, nil
 }
 
-type rootInvite struct {
-	Code      string
-	ExpiresAt time.Time
+type RootInvite struct {
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-func createRootInvites(ctx context.Context, injector do.Injector, root *user.User, n int) error {
+func createRootInvites(ctx context.Context, injector do.Injector, root *user.User, n int, out io.Writer) error {
 	rootCreateInvite, err := do.Invoke[*application.RootCreateInvite](injector)
 	if err != nil {
 		return fmt.Errorf("init root create invite: %w", err)
 	}
 
-	invites := make([]rootInvite, n)
+	invites := make([]RootInvite, n)
 	for i := range n {
 		code, expiresAt, errExec := rootCreateInvite.Execute(ctx, root.ID())
 		if errExec != nil {
 			return fmt.Errorf("create root's invites: %w", errExec)
 		}
-		invites[i] = rootInvite{Code: code, ExpiresAt: expiresAt}
+		invites[i] = RootInvite{Code: code, ExpiresAt: expiresAt}
 	}
 
-	printInvitesTable(invites)
+	if errPrint := printInvitesJSON(invites, out); errPrint != nil {
+		return fmt.Errorf("write invites to json: %w", errPrint)
+	}
 	return nil
 }
 
-func printInvitesTable(invites []rootInvite) {
-	fmt.Println("#\tROOT INVITE CODE\t\t\t\t\tEXPIRES AT")
-	fmt.Println("-\t----------------------------------------------------\t-------------------")
-	for i, inv := range invites {
-		fmt.Printf("%d\t%s\t%s\n", i+1, inv.Code, inv.ExpiresAt.Format(time.RFC822))
+func printInvitesJSON(invites []RootInvite, out io.Writer) error {
+	err := json.MarshalWrite(
+		out,
+		invites,
+		jsontext.WithIndent("  "),
+	)
+	if err != nil {
+		return err
 	}
+	fmt.Fprintln(out)
+
+	return nil
 }
 
 func waitForShutdown(ctx context.Context, injector *do.RootScope) error {
