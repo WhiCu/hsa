@@ -81,6 +81,9 @@ var _ = Describe("Handler", func() {
 				Transport: &remoteAddrBinder{handler: router},
 			},
 			Reporter: httpexpect.NewRequireReporter(GinkgoT()),
+			Printers: []httpexpect.Printer{
+				httpexpect.NewDebugPrinter(GinkgoT(), true),
+			},
 		})
 
 		testUserID = uuid.New()
@@ -663,6 +666,61 @@ var _ = Describe("Handler", func() {
 				Expect().
 				Status(http.StatusOK).
 				Header("Access-Control-Allow-Origin").IsEqual("*")
+		})
+		It("should handle preflight OPTIONS requests and return correct CORS headers", func() {
+			res := e.OPTIONS("/login/begin").
+				WithHeader("Origin", "http://localhost:3000").
+				WithHeader("Access-Control-Request-Method", "POST").
+				WithHeader("Access-Control-Request-Headers", "Authorization, Content-Type").
+				Expect().
+				// go-chi/cors по умолчанию возвращает 204 No Content для preflight
+				Status(http.StatusOK)
+				// Проверяем разрешенный источник
+			res.Header("Access-Control-Allow-Origin").IsEqual("*")
+			// Проверяем разрешенные методы (используем Contains, так как go-chi объединяет их через запятую)
+			res.Header("Access-Control-Allow-Methods").Contains("POST")
+			// Проверяем разрешенные заголовки
+			res.Header("Access-Control-Allow-Headers").Contains("Authorization")
+			res.Header("Access-Control-Allow-Headers").Contains("Content-Type")
+			// Проверяем Max-Age
+			res.Header("Access-Control-Max-Age").IsEqual("300")
+		})
+
+		It("should attach CORS headers to actual requests", func() {
+			mockAuthSuccess()
+			// Вызываем реальный эндпоинт с Origin
+			e.GET("/auth/verify").
+				WithHeader("Origin", "http://localhost:3000").
+				WithHeader("Authorization", authHeader).
+				Expect().
+				Status(http.StatusNoContent).
+				Header("Access-Control-Allow-Origin").IsEqual("*")
+		})
+
+		It("should expose requested headers on actual requests", func() {
+			// Для проверки ExposedHeaders лучше всего подходит /auth/verify,
+			// который возвращает X-Auth-User
+			mockAuthSuccess() // Включаем успешную авторизацию для этого теста
+
+			res := e.GET("/auth/verify").
+				WithHeader("Origin", "http://localhost:3000").
+				WithHeader("Authorization", authHeader).
+				Expect().
+				Status(http.StatusNoContent)
+			res.Header("Access-Control-Allow-Origin").IsEqual("*")
+			res.Header("Access-Control-Expose-Headers").Contains("X-Auth-User")
+		})
+		It("should expose requested headers on actual requests", func() {
+			mockAuthSuccess()
+
+			res := e.GET("/auth/verify").
+				WithHeader("Origin", "http://localhost:3000").
+				WithHeader("Authorization", authHeader).
+				Expect().
+				Status(http.StatusNoContent)
+
+			res.Header("Access-Control-Allow-Origin").IsEqual("*")
+			res.Header("Access-Control-Expose-Headers").Contains("X-Auth-User")
 		})
 	})
 })
