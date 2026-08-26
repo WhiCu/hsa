@@ -145,7 +145,7 @@ func TestTelemetryPackageDI(t *testing.T) {
 
 	var nilSvc *telemetry.Service
 	if err2 := nilSvc.Shutdown(ctx); err2 != nil {
-		t.Fatalf("Expected no error on nil shutdown, got: %v", err)
+		t.Fatalf("Expected no error on nil shutdown, got: %v", err2)
 	}
 }
 
