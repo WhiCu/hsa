@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env/v2"
-	"github.com/knadh/koanf/providers/file"
+	fsProvider "github.com/knadh/koanf/providers/fs"
 	"github.com/knadh/koanf/v2"
 )
 
@@ -19,19 +20,14 @@ const ConfigPath = "PATH_CONFIG"
 
 var Validate = validator.New(validator.WithRequiredStructEnabled())
 
-func NewKoanf(path string) (*koanf.Koanf, error) {
-	path, err := resolvePath(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve config path: %w", err)
-	}
-
+func NewKoanf(fsys fs.FS, path string) (*koanf.Koanf, error) {
 	var conf = koanf.Conf{
 		Delim:       ".",
 		StrictMerge: true,
 	}
 	var k = koanf.NewWithConf(conf)
 
-	err = k.Load(file.Provider(path), yaml.Parser())
+	err := k.Load(fsProvider.Provider(fsys, path), yaml.Parser())
 	if err != nil {
 		return nil, fmt.Errorf("load yaml config: %w", err)
 	}
@@ -66,7 +62,7 @@ func GetConfig[T any](k *koanf.Koanf, key string, def *T) (T, error) {
 	return *def, nil
 }
 
-func resolvePath(def string) (string, error) {
+func ResolvePath(def string) (string, error) {
 	path := cmp.Or(os.Getenv(ConfigPath), def)
 	if path == "" {
 		return "", ErrPathNotSet
@@ -77,6 +73,14 @@ func resolvePath(def string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func ResolveDiskFS(path string) (fs.FS, string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve absolute path: %w", err)
+	}
+	return os.DirFS(filepath.Dir(abs)), filepath.Base(abs), nil
 }
 
 func DumpFlat(k *koanf.Koanf) string {

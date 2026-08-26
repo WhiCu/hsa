@@ -16,6 +16,7 @@ import (
 	dohttpstd "github.com/samber/do/http/std/v2"
 	"github.com/samber/do/v2"
 	"github.com/urfave/cli/v3"
+	"github.com/whicu/hsa/internal/config"
 	"github.com/whicu/hsa/internal/di"
 )
 
@@ -68,14 +69,18 @@ func cmdRun() error {
 			},
 			&cli.StringFlag{
 				Name:    "debug-addr",
-				Value:   ":8080",
+				Value:   ":8081",
 				Usage:   "HTTP address for samber/do debug UI",
 				Sources: cli.EnvVars("DEBUG_ADDR"),
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			configPath := cmd.String("config")
-			injector := di.New(ctx, configPath)
+			fsys, file, err := config.ResolveDiskFS(configPath)
+			if err != nil {
+				return cli.Exit(err, ExitNoInput)
+			}
+			injector := di.New(ctx, fsys, file)
 
 			if cmd.Bool("samber-web-debug") {
 				go startDebugServer(ctx, injector, cmd.String("debug-addr"))
@@ -99,8 +104,8 @@ func cmdRun() error {
 				},
 			}
 
-			if err := di.Run(ctx, injector, runCfg); err != nil {
-				return cli.Exit(err, ExitSoftware)
+			if errRun := di.Run(ctx, injector, runCfg); errRun != nil {
+				return cli.Exit(errRun, ExitSoftware)
 			}
 			return nil
 		},

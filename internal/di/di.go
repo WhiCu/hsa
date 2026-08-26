@@ -7,10 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain/user"
+	internalHTTP "github.com/whicu/hsa/internal/presentation/http"
 
 	"github.com/knadh/koanf/v2"
 	"github.com/samber/do/v2"
@@ -32,7 +36,7 @@ type Config struct {
 	}
 }
 
-func New(ctx context.Context, configPath string) *do.RootScope {
+func New(ctx context.Context, fsys fs.FS, configPath string) *do.RootScope {
 	injector := do.NewWithOpts(&do.InjectorOpts{
 		Logf:                     diLogf,
 		HealthCheckParallelism:   16,
@@ -40,7 +44,7 @@ func New(ctx context.Context, configPath string) *do.RootScope {
 	})
 
 	do.ProvideValue(injector, ctx)
-	registerPackages(injector, configPath)
+	registerPackages(injector, fsys, configPath)
 
 	return injector
 }
@@ -49,15 +53,16 @@ func diLogf(format string, args ...any) {
 	fmt.Printf("[DI] "+format+"\n", args...)
 }
 
-func registerPackages(i do.Injector, configPath string) {
-	config.Package(configPath)(i) // no dependencies
-	idgen.Package(i)              // no dependencies
-	telemetry.Package(i)          // config
-	logger.Package(i)             // config, telemetry
-	storage.Package(i)            // config, telemetry
-	crypto.Package(i)             // config
-	webauthnadapter.Package(i)    // config, crypto, storage, telemetry
-	application.Package(i)        // config, webauthnadapter, crypto, storage, telemetry
+func registerPackages(i do.Injector, fsys fs.FS, configPath string) {
+	config.Package(fsys, configPath)(i) // no dependencies
+	idgen.Package(i)                    // no dependencies
+	telemetry.Package(i)                // config
+	logger.Package(i)                   // config, telemetry
+	storage.Package(i)                  // config, telemetry
+	crypto.Package(i)                   // config
+	webauthnadapter.Package(i)          // config, crypto, storage, telemetry
+	application.Package(i)              // config, webauthnadapter, crypto, storage, telemetry
+	internalHTTP.Package(i)             // config, infra, application
 }
 
 func Run(ctx context.Context, injector *do.RootScope, cfg Config) error {
@@ -92,7 +97,33 @@ func Run(ctx context.Context, injector *do.RootScope, cfg Config) error {
 		}
 	}
 
+	if errHTTP := initHTTPServer(ctx, injector, log); errHTTP != nil {
+		return errHTTP
+	}
+
 	return waitForShutdown(ctx, injector)
+}
+
+func initHTTPServer(ctx context.Context, injector do.Injector, log *slog.Logger) error {
+	srv, err := do.Invoke[*http.Server](injector)
+	if err != nil {
+		return fmt.Errorf("init http server: %w", err)
+	}
+
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", srv.Addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", srv.Addr, err)
+	}
+
+	go func() {
+		log.InfoContext(ctx, "http server listening", slog.String("addr", srv.Addr))
+		if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.ErrorContext(ctx, "http server failed", slog.Any("error", serveErr))
+		}
+	}()
+
+	return nil
 }
 
 func initTelemetry(injector do.Injector) error {

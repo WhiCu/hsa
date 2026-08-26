@@ -12,7 +12,8 @@ import (
 )
 
 var _ = Describe("Config", func() {
-	Describe("resolvePath", func() {
+
+	Describe("NewKoanf", func() {
 		var (
 			tempFile string
 		)
@@ -26,17 +27,6 @@ var _ = Describe("Config", func() {
 
 		AfterEach(func() {
 			os.Remove(tempFile)
-			os.Unsetenv(config.ConfigPath)
-		})
-
-		It("should use PATH_CONFIG environment variable if set", func() {
-			os.Setenv(config.ConfigPath, tempFile)
-
-			// resolvePath is internal, so we need to test it through NewKoanf or export it for tests.
-			// However, since it's unexported, we'll test it via NewKoanf, which fails or succeeds based on it.
-			k, err := config.NewKoanf("non-existent-default.yaml")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(k).NotTo(BeNil())
 		})
 
 		It("should test env provider transformer logic", func() {
@@ -46,7 +36,10 @@ var _ = Describe("Config", func() {
 			os.Setenv("APP_FOO_BAR", "test")
 			os.Setenv("APP_ARRAY_VAL", "one two three")
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k).NotTo(BeNil())
 
@@ -61,31 +54,12 @@ var _ = Describe("Config", func() {
 			err := os.WriteFile(tempFile, []byte("invalid: yaml: content: -"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("load yaml config"))
-			Expect(k).To(BeNil())
-		})
-
-		It("should fallback to default path if PATH_CONFIG is not set", func() {
-			k, err := config.NewKoanf(tempFile)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(k).NotTo(BeNil())
-		})
-
-		It("should return error if path is empty", func() {
-			k, err := config.NewKoanf("")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("resolve config path"))
-			Expect(err.Error()).To(ContainSubstring(config.ErrPathNotSet.Error()))
-			Expect(k).To(BeNil())
-		})
-
-		It("should return error if file does not exist", func() {
-			k, err := config.NewKoanf("non-existent-default.yaml")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("resolve config path"))
-			Expect(err.Error()).To(ContainSubstring(config.ErrPathNotExist.Error()))
 			Expect(k).To(BeNil())
 		})
 	})
@@ -104,18 +78,23 @@ var _ = Describe("Config", func() {
 			f, err := os.CreateTemp("", "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
-			f.Close()
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
-			os.Remove(tempFile)
+			err := os.Remove(tempFile)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should successfully get and validate config", func() {
 			err := os.WriteFile(tempFile, []byte("test:\n  name: 'test-name'\n  value: 42"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).NotTo(HaveOccurred())
 
 			var def TestConfig
@@ -129,7 +108,10 @@ var _ = Describe("Config", func() {
 			err := os.WriteFile(tempFile, []byte("test:\n  value: 42"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).NotTo(HaveOccurred())
 
 			var def TestConfig
@@ -142,7 +124,10 @@ var _ = Describe("Config", func() {
 			err := os.WriteFile(tempFile, []byte("test:\n  name: []"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).NotTo(HaveOccurred())
 
 			var def TestConfig
@@ -181,7 +166,10 @@ nested:
 			err := os.WriteFile(tempFile, []byte(yamlContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			k, err := config.NewKoanf(tempFile)
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			k, err := config.NewKoanf(fsys, name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k).NotTo(BeNil())
 
@@ -201,6 +189,21 @@ nested:
 		})
 	})
 
+	Describe("ResolveDiskFS", func() {
+		It("should correctly split absolute path into FS and filename", func() {
+			f, err := os.CreateTemp("", "config-test-*.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			tempFile := f.Name()
+			f.Close()
+			defer os.Remove(tempFile)
+
+			fsys, name, err := config.ResolveDiskFS(tempFile)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fsys).NotTo(BeNil())
+			Expect(name).NotTo(BeEmpty())
+		})
+	})
+
 	Describe("Package", func() {
 		var (
 			tempFile string
@@ -211,24 +214,33 @@ nested:
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
 			f.Close()
+
+			err = os.WriteFile(tempFile, []byte("pkg_key: pkg_value"), 0644)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
 			os.Remove(tempFile)
 		})
 
-		It("should return a valid di package and successfully initialize NewKoanf", func() {
-			err := os.WriteFile(tempFile, []byte("key: value"), 0644)
+		It("should return a valid di package and successfully initialize Koanf", func() {
+			// 1. Сначала резолвим ФС так же, как это будет делать main.go
+			fsys, name, err := config.ResolveDiskFS(tempFile)
 			Expect(err).NotTo(HaveOccurred())
 
-			pkg := config.Package(tempFile)
+			// 2. Инициализируем пакет новой сигнатурой
+			pkg := config.Package(fsys, name)
 			Expect(pkg).NotTo(BeNil())
 
+			// 3. Проверяем инжектор
 			i := do.New()
 			pkg(i)
 			k, err := do.Invoke[*koanf.Koanf](i)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k).NotTo(BeNil())
+
+			// Убеждаемся, что конфиг реально загрузился
+			Expect(k.String("pkg_key")).To(Equal("pkg_value"))
 		})
 	})
 })
