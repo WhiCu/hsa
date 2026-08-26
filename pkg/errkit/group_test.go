@@ -83,4 +83,20 @@ var _ = Describe("Group", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("direct error"))
 	})
+
+	It("safely recovers from panics and converts them to PanicError", func() {
+		var g errkit.Group
+
+		g.Go(func() error {
+			panic("test panic")
+		})
+
+		err := g.Wait()
+		Expect(err).To(HaveOccurred())
+
+		var panicErr *errkit.PanicError
+		Expect(errors.As(err, &panicErr)).To(BeTrue())
+		Expect(panicErr.Value).To(Equal("test panic"))
+		Expect(err.Error()).To(ContainSubstring("panic recovered: test panic"))
+	})
 })
