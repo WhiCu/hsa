@@ -18,8 +18,8 @@ func TestTelemetryProviders(t *testing.T) {
 		Enabled:        true,
 		Exporter: telemetry.ExporterConfig{
 			Conn: telemetry.ConnConfig{
-				Endpoint: "localhost:4317",
-				Insecure: true,
+				Endpoint:   "localhost:4317",
+				Insecure:   true,
 				Compressor: "gzip",
 				KeepAlive: telemetry.KeepAliveConfig{
 					Time:                10 * time.Second,
@@ -124,9 +124,9 @@ func TestTelemetryPackageDI(t *testing.T) {
 	_ = k.Set("telemetry.service_name", "test")
 	_ = k.Set("telemetry.service_version", "1.0.0")
 	_ = k.Set("telemetry.environment", "dev")
-    // Set a very small timeout for the tests to fail faster / avoid blocking timeout errors
-    _ = k.Set("telemetry.exporter.timeout", "100ms")
-    _ = k.Set("telemetry.metric.interval", "1h")
+	// Set a very small timeout for the tests to fail faster / avoid blocking timeout errors
+	_ = k.Set("telemetry.exporter.timeout", "100ms")
+	_ = k.Set("telemetry.metric.interval", "1h")
 	do.ProvideValue(i, k)
 
 	telemetry.Package(i)
@@ -144,7 +144,7 @@ func TestTelemetryPackageDI(t *testing.T) {
 	_ = svc.Shutdown(ctx)
 
 	var nilSvc *telemetry.Service
-	if err := nilSvc.Shutdown(ctx); err != nil {
+	if err2 := nilSvc.Shutdown(ctx); err2 != nil {
 		t.Fatalf("Expected no error on nil shutdown, got: %v", err)
 	}
 }
