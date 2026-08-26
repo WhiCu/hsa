@@ -6,3 +6,7 @@
 **Finding:** Running `go test ./... -tags=testcontainers` might fail in restricted CI/Docker environments (like Docker-in-Docker overlayfs errors). `github.com/go-webauthn/webauthn` has unreachable error branches internally related to crypto/rand or hardcoded JSON structs that cannot be meaningfully tested via its public API.
 **Learning:** For testcontainers, always have a fallback. For webauthn internal failures, explicit `// uncovered: ...` documentation is the correct approach to prevent wasting time on unmockable deep dependencies.
 **Prevention/Action:** Use `docker info` to guard testcontainers execution or fall back gracefully. Apply `// uncovered: internal crypto/rand failure is practically untestable without deep mocking of go-webauthn` for webauthn-specific gaps.
+## 2026-08-26 - Testcontainers Overlayfs Error Fallback
+ **Finding:** Running `go test ./... -tags=testcontainers` threw overlayfs mount errors on the test runner because of a generic container creation error in `postgres` testcontainers startup.
+ **Learning:** The testcontainers stack can randomly fail natively depending on the docker daemon configuration or snapshotter state.
+ **Prevention/Action:** Always respect the instruction to fallback to non-docker tags `go test ./... -race -v -cover` if `-tags=testcontainers` is unreliable, and ensure the fallback command actually unblocks the tests.
