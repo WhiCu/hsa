@@ -255,8 +255,6 @@ var _ = Describe("CreateInvite", func() {
 			counter.EXPECT().
 				CountActiveByUser(mock.Anything, createdBy, mock.Anything).
 				RunAndReturn(func(_ context.Context, _ user.UserID, _ time.Time) (int, error) {
-					// Имитация сетевой задержки к БД
-					time.Sleep(10 * time.Millisecond)
 					return activeInvites, nil
 				}).Maybe()
 
