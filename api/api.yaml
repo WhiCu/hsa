@@ -300,7 +300,7 @@ paths:
       description: >
         Создаёт инвайт от лица текущего авторизованного пользователя.
         UserID берётся из Bearer токена (PASETO) в middleware.
-      security: [{ BearerAuth: [] }]
+      security: [{ BearerAuth: [admin, member] }]
       responses:
         '201':
           description: Инвайт создан
@@ -408,7 +408,7 @@ paths:
       operationId: AuthVerifyGet
       summary: Проверить access token
       description: Проверяет Bearer access token для Traefik ForwardAuth.
-      security: [{ BearerAuth: [] }]
+      security: [{ BearerAuth: [admin, member] }]
       responses:
         '204':
           description: Access token valid
@@ -522,7 +522,7 @@ paths:
       tags: [Sessions]
       summary: Выйти с конкретного устройства
       description: Отзыв конкретной сессии по её ID.
-      security: [{ BearerAuth: [] }]
+      security: [{ BearerAuth: [admin, member] }]
       parameters:
         - $ref: '#/components/parameters/SessionIdPath'
       responses:

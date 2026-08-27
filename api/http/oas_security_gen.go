@@ -38,9 +38,18 @@ var operationRolesBearerAuth = map[string][]string{
 	AdminUsersUserIdRevokeChainPostOperation: []string{
 		"admin",
 	},
-	AuthVerifyGetOperation:           []string{},
-	InvitesPostOperation:             []string{},
-	SessionsSessionIdDeleteOperation: []string{},
+	AuthVerifyGetOperation: []string{
+		"admin",
+		"member",
+	},
+	InvitesPostOperation: []string{
+		"admin",
+		"member",
+	},
+	SessionsSessionIdDeleteOperation: []string{
+		"admin",
+		"member",
+	},
 }
 
 // GetRolesForBearerAuth returns the required roles for the given operation.
