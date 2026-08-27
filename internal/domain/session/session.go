@@ -2,7 +2,6 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"net/netip"
 	"time"
 
@@ -114,7 +113,21 @@ func (t *RefreshToken) String() string {
 	if t == nil {
 		return "<nil>"
 	}
-	return fmt.Sprintf("RefreshToken{id: %v, userID: %v, tokenHash: ***REDACTED***, deviceInfo: %v, ipAddress: %v, expiresAt: %v, revokedAt: %v, createdAt: %v}", t.id, t.userID, t.deviceInfo, t.ipAddress, t.expiresAt, t.revokedAt, t.createdAt)
+
+	revokedAtStr := "<nil>"
+	if t.revokedAt != nil {
+		revokedAtStr = t.revokedAt.Format(time.RFC3339)
+	}
+
+	// ⚡ Bolt: Use direct string concatenation for hot path logging performance
+	return "RefreshToken{id: " + t.id.String() +
+		", userID: " + t.userID.String() +
+		", tokenHash: ***REDACTED***" +
+		", deviceInfo: " + t.deviceInfo +
+		", ipAddress: " + t.ipAddress.String() +
+		", expiresAt: " + t.expiresAt.Format(time.RFC3339) +
+		", revokedAt: " + revokedAtStr +
+		", createdAt: " + t.createdAt.Format(time.RFC3339) + "}"
 }
 
 func Reconstruct(id RefreshTokenID, userID user.UserID, tokenHash, deviceInfo string, ipAddress netip.Addr, expiresAt time.Time, revokedAt *time.Time, createdAt time.Time) *RefreshToken {

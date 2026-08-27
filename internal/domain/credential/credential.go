@@ -2,7 +2,8 @@ package credential
 
 import (
 	"errors"
-	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,7 +98,14 @@ func (c *Credential) String() string {
 	if c == nil {
 		return "<nil>"
 	}
-	return fmt.Sprintf("Credential{id: %v, externalID: ***REDACTED***, userID: %v, publicKey: ***REDACTED***, signCount: %d, transports: %v, createdAt: %v}", c.id, c.userID, c.signCount, c.transports, c.createdAt)
+	// ⚡ Bolt: Use direct string concatenation for hot path logging performance
+	return "Credential{id: " + c.id.String() +
+		", externalID: ***REDACTED***" +
+		", userID: " + c.userID.String() +
+		", publicKey: ***REDACTED***" +
+		", signCount: " + strconv.FormatUint(uint64(c.signCount), 10) +
+		", transports: [" + strings.Join(c.transports, " ") + "]" +
+		", createdAt: " + c.createdAt.Format(time.RFC3339) + "}"
 }
 
 func Reconstruct(id CredentialID, externalID ExternalID, userID user.UserID, publicKey []byte, signCount uint32, transports []string, createdAt time.Time, revokedAt *time.Time) *Credential {

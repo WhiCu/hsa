@@ -2,7 +2,6 @@ package invite
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,7 +88,13 @@ func (i *Invite) String() string {
 	if i.usedBy != nil {
 		usedByStr = i.usedBy.String()
 	}
-	return fmt.Sprintf("Invite{id: %v, createdBy: %v, codeHash: ***REDACTED***, usedBy: %v, expiresAt: %v, createdAt: %v}", i.id, i.createdBy, usedByStr, i.expiresAt, i.createdAt)
+	// ⚡ Bolt: Use direct string concatenation for hot path logging performance
+	return "Invite{id: " + i.id.String() +
+		", createdBy: " + i.createdBy.String() +
+		", codeHash: ***REDACTED***" +
+		", usedBy: " + usedByStr +
+		", expiresAt: " + i.expiresAt.Format(time.RFC3339) +
+		", createdAt: " + i.createdAt.Format(time.RFC3339) + "}"
 }
 
 func Reconstruct(id InviteID, createdBy user.UserID, codeHash string, usedBy *user.UserID, usedAt *time.Time, expiresAt, createdAt time.Time) *Invite {

@@ -2,7 +2,7 @@ package key
 
 import (
 	"errors"
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,7 +105,13 @@ func (k *WrappedKey) String() string {
 	if k == nil {
 		return "<nil>"
 	}
-	return fmt.Sprintf("WrappedKey{id: %v, userID: %v, credentialID: %v, scope: %d, wrappedDEK: ***REDACTED***, wrapAlgorithm: %v}", k.id, k.userID, k.credentialID, k.scope, k.wrapAlgorithm)
+	// ⚡ Bolt: Use direct string concatenation for hot path logging performance
+	return "WrappedKey{id: " + k.id.String() +
+		", userID: " + k.userID.String() +
+		", credentialID: " + k.credentialID.String() +
+		", scope: " + strconv.Itoa(int(k.scope)) +
+		", wrappedDEK: ***REDACTED***" +
+		", wrapAlgorithm: " + k.wrapAlgorithm + "}"
 }
 
 func Reconstruct(
