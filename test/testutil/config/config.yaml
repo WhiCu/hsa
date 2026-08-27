@@ -1,0 +1,112 @@
+# =========================================================
+# app — InviteConfig / SessionConfig
+# =========================================================
+app:
+  invite:
+    max_active: 3          # required, gt=0 — сколько активных инвайтов у юзера одновременно
+    ttl: 72h                # required, gt=0
+    root_ttl: 168h            # required, gt=0
+    max_wrapped_key: 5      # required, gt=0 — в default этого поля нет, ставим явно
+
+  session:
+    refresh_ttl: 720h       # required, gt=0 (30 дней)
+    access_ttl: 15m         # required, gt=0
+
+# =========================================================
+# webauthn
+# =========================================================
+webauthn:
+  rp:
+    id: "example.com"                     # required — обычно eTLD+1 без схемы и порта
+    display_name: "My App"                # required
+    origins:                              # required, min=1
+      - "https://example.com"
+      - "https://app.example.com"
+  challenge_ttl: 5m                       # required, gt=0
+
+# =========================================================
+# crypto — HMAC + PASETO (все ключи — hex)
+# =========================================================
+crypto:
+  # required, min=32 символа (не обязательно hex, просто строка >=32)
+  hmac_secret: "CHANGE_ME_32_PLUS_CHAR_SECRET_1234567890"
+
+  paseto:
+    # required, hex — 32 байта (64 hex-символа) для V4 Local (XChaCha20)
+    symmetric_key: "0000000000000000000000000000000000000000000000000000000000000000000000"
+    # required, hex — seed/secret ed25519 для V4 Public (обычно 64 байта / 128 hex-символов)
+    secret_key: "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    # optional, hex — если пусто, будет выведен из secret_key
+    public_key: ""
+
+# =========================================================
+# storage — Postgres
+# =========================================================
+storage:
+  access_type: SQL                # required, oneof=SQL
+  migrations_dir: "./migrations"  # required
+
+  host: "127.0.0.1"               # required, hostname|ip
+  port: "5432"                    # required, numeric (строка!)
+  user: "postgres"                # required
+  pass: "postgres"                # required
+  name: "app_db"                  # required
+
+  insecure: true                  # sslmode=disable, если false — sslmode=require
+
+  max_open_conns: 16              # required, gt=0
+  max_idle_conns: 16              # required, gt=0, lte=max_open_conns
+
+  conn_max_lifetime: 30s          # required, gt=0
+  conn_max_idle_time: 30s         # required, gt=0
+
+# =========================================================
+# telemetry — OpenTelemetry
+# =========================================================
+telemetry:
+  service_name: "hsa"
+  service_version: "1.0.0"        # required, semver
+  environment: "dev"              # required, oneof=dev stage prod
+  enabled: false
+
+  exporter:
+    conn:
+      endpoint: "127.0.0.1:4317"  # required, hostname_port
+      max_msg_size: 16777216      # 16MiB, min=0
+      insecure: true
+      compressor: "gzip"          # oneof=gzip ''
+
+      keep_alive:
+        time: 30s                 # required, gt=0
+        timeout: 5s                # required, gt=0
+        permit_without_stream: true
+
+      backoff:
+        base_delay: 1s             # required, gt=0
+        max_delay: 30s             # required, gt=0
+        multiplier: 1.6            # gte=0
+        jitter: 0.2                # gte=0, lte=1
+
+    timeout: 5s                    # required, gt=0
+
+  sampler:
+    type: "always"                 # required, oneof=always never ratio
+    ratio: 1.0                     # gte=0, lte=1 (используется только при type=ratio)
+
+  metric:
+    interval: 15s                  # required, gt=0
+
+# =========================================================
+# logger
+# =========================================================
+logger:
+  level: trace                     # required, oneof=trace debug info warn error fatal panic
+  caller: 0                        # min=0; 0 = выключено, >0 = глубина стека вызова
+
+  file:
+    name: "logs/app.log"           # required
+    size: 134217728                # 128MiB, gt=0
+    backups: 7                     # min=0, 0 = хранить все
+
+    channel_size: 4096             # gt=0 — размер канала для async записи
+    discard: true                  # true = дропать записи при переполненном канале
