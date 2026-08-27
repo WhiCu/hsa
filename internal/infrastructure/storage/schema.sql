@@ -1,5 +1,8 @@
+CREATE TYPE user_role AS ENUM ('member', 'admin');
+
 CREATE TABLE users (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role       user_role NOT NULL DEFAULT 'member',
     invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -62,7 +62,8 @@ var _ = Describe("UserRepository", func() {
 			Expect(userRepo.Save(ctx, parent)).To(Succeed())
 
 			childID := uuid.New()
-			child, err := user.New(childID, parentID, time.Now())
+			// Добавили роль user.Member, так как сигнатура конструктора изменилась
+			child, err := user.New(childID, user.Member, parentID, time.Now())
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(userRepo.Save(ctx, child)).To(Succeed())
@@ -82,10 +83,40 @@ var _ = Describe("UserRepository", func() {
 
 		It("enforces foreign key constraint on invited_by", func(ctx SpecContext) {
 			nonExistentParentID := uuid.New()
-			child, err := user.New(uuid.New(), nonExistentParentID, time.Now())
+			child, err := user.New(uuid.New(), user.Member, nonExistentParentID, time.Now())
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(userRepo.Save(ctx, child)).To(HaveOccurred())
+		})
+	})
+
+	Describe("FindByID", func() {
+		It("successfully retrieves an existing user and their role", func(ctx SpecContext) {
+			rootID := uuid.New()
+			now := time.Now().Truncate(time.Microsecond)
+			root, err := user.NewRoot(rootID, now)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userRepo.Save(ctx, root)).To(Succeed())
+
+			childID := uuid.New()
+			child, err := user.New(childID, user.Member, rootID, now)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userRepo.Save(ctx, child)).To(Succeed())
+
+			found, err := userRepo.FindByID(ctx, childID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).ToNot(BeNil())
+
+			Expect(found.ID()).To(Equal(childID))
+			Expect(found.Role()).To(Equal(user.Member))
+			Expect(*found.InvitedBy()).To(Equal(rootID))
+			Expect(found.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
+		})
+
+		It("returns domain.ErrNotFound when user does not exist", func(ctx SpecContext) {
+			found, err := userRepo.FindByID(ctx, uuid.New())
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(found).To(BeNil())
 		})
 	})
 
@@ -96,7 +127,7 @@ var _ = Describe("UserRepository", func() {
 			// Построение дерева приглашений:
 			// Root
 			//  ├── Child 1
-			//  │    └── Grandchild 1.1
+			//  │   └── Grandchild 1.1
 			//  └── Child 2
 
 			rootID := uuid.New()
@@ -106,11 +137,11 @@ var _ = Describe("UserRepository", func() {
 
 			root, err := user.NewRoot(rootID, now)
 			Expect(err).ToNot(HaveOccurred())
-			child1, err := user.New(child1ID, rootID, now)
+			child1, err := user.New(child1ID, user.Member, rootID, now)
 			Expect(err).ToNot(HaveOccurred())
-			child2, err := user.New(child2ID, rootID, now)
+			child2, err := user.New(child2ID, user.Member, rootID, now)
 			Expect(err).ToNot(HaveOccurred())
-			grandchild11, err := user.New(grandchild11ID, child1ID, now)
+			grandchild11, err := user.New(grandchild11ID, user.Member, child1ID, now)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(userRepo.Save(ctx, root)).To(Succeed())
@@ -134,12 +165,13 @@ var _ = Describe("UserRepository", func() {
 			Expect(child2Chain).To(Equal([]uuid.UUID{child2ID}))
 		})
 
-		It("returns an empty slice for non-existent user", func(ctx SpecContext) {
+		It("returns domain.ErrNotFound for non-existent user", func(ctx SpecContext) {
 			descendants, err := userRepo.Descendants(ctx, uuid.New())
 			Expect(err).To(MatchError(domain.ErrNotFound))
 			Expect(descendants).To(BeEmpty())
 		})
 	})
+
 	Describe("FindRoot", func() {
 		It("successfully retrieves the root user when one exists", func(ctx SpecContext) {
 			rootID := uuid.New()
@@ -150,7 +182,7 @@ var _ = Describe("UserRepository", func() {
 			Expect(userRepo.Save(ctx, root)).To(Succeed())
 
 			childID := uuid.New()
-			child, err := user.New(childID, rootID, now)
+			child, err := user.New(childID, user.Member, rootID, now)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(userRepo.Save(ctx, child)).To(Succeed())
 
@@ -159,6 +191,7 @@ var _ = Describe("UserRepository", func() {
 			Expect(found).ToNot(BeNil())
 
 			Expect(found.ID()).To(Equal(rootID))
+			Expect(found.Role()).To(Equal(user.Admin)) // Проверяем, что роль Root-пользователя восстановилась
 			Expect(found.InvitedBy()).To(BeNil())
 			Expect(found.CreatedAt()).To(BeTemporally("~", now, time.Millisecond))
 		})

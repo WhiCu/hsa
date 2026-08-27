@@ -189,13 +189,34 @@ func (q *Queries) FindRefreshTokenByTokenHashForUpdate(ctx context.Context, toke
 }
 
 const findRootUser = `-- name: FindRootUser :one
-SELECT id, invited_by, created_at FROM users WHERE invited_by IS NULL LIMIT 1
+SELECT id, role, invited_by, created_at FROM users WHERE invited_by IS NULL LIMIT 1
 `
 
 func (q *Queries) FindRootUser(ctx context.Context) (User, error) {
 	row := q.db.QueryRow(ctx, findRootUser)
 	var i User
-	err := row.Scan(&i.ID, &i.InvitedBy, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Role,
+		&i.InvitedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const findUserByID = `-- name: FindUserByID :one
+SELECT id, role, invited_by, created_at FROM users WHERE id = $1
+`
+
+func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, findUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Role,
+		&i.InvitedBy,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
@@ -462,24 +483,32 @@ func (q *Queries) SaveInvite(ctx context.Context, arg SaveInviteParams) error {
 const saveUser = `-- name: SaveUser :exec
 INSERT INTO users (
     id,
+    role,
     invited_by,
     created_at
 )
 VALUES (
     $1,
     $2,
-    $3
+    $3,
+    $4
 )
 `
 
 type SaveUserParams struct {
 	ID        uuid.UUID
+	Role      UserRole
 	InvitedBy uuid.NullUUID
 	CreatedAt time.Time
 }
 
 func (q *Queries) SaveUser(ctx context.Context, arg SaveUserParams) error {
-	_, err := q.db.Exec(ctx, saveUser, arg.ID, arg.InvitedBy, arg.CreatedAt)
+	_, err := q.db.Exec(ctx, saveUser,
+		arg.ID,
+		arg.Role,
+		arg.InvitedBy,
+		arg.CreatedAt,
+	)
 	return err
 }
 

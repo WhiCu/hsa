@@ -148,7 +148,7 @@ var _ = Describe("SessionRepository", func() {
 
 			// Создаем второго пользователя
 			secondUserID := uuid.New()
-			secondUser, err := user.New(secondUserID, testUserID, now)
+			secondUser, err := user.New(secondUserID, user.Member, testUserID, now)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(userRepo.Save(ctx, secondUser)).To(Succeed())
 

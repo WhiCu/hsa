@@ -59,7 +59,7 @@ var _ = Describe("InviteRepository", func() {
 		Expect(userRepo.Save(ctx, creatorUser)).To(Succeed())
 
 		usedByUserID = uuid.New()
-		usedByUser, err = user.New(usedByUserID, creatorUserID, time.Now())
+		usedByUser, err = user.New(usedByUserID, user.Member, creatorUserID, time.Now())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(userRepo.Save(ctx, usedByUser)).To(Succeed())
 	})

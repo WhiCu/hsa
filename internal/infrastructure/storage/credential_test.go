@@ -23,12 +23,13 @@ const (
 var _ = Describe("CredentialRepository", func() {
 
 	var (
-		injector   do.Injector
-		st         *storage.Storage
-		userRepo   *storage.UserRepository
-		credRepo   *storage.CredentialRepository
-		testUser   *user.User
-		testUserID uuid.UUID
+		injector    do.Injector
+		st          *storage.Storage
+		userRepo    *storage.UserRepository
+		credRepo    *storage.CredentialRepository
+		testUser    *user.User
+		testUserID  uuid.UUID
+		defaultRole = user.Member
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -150,7 +151,7 @@ var _ = Describe("CredentialRepository", func() {
 
 			// Создаем второго пользователя и его собственный ключ
 			otherUserID := uuid.New()
-			otherUser, err := user.New(otherUserID, testUserID, now)
+			otherUser, err := user.New(otherUserID, defaultRole, testUserID, now)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(userRepo.Save(ctx, otherUser)).To(Succeed())
 

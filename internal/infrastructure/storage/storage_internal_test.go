@@ -113,7 +113,7 @@ var _ = Describe("Storage Transactions & RunInTransaction", func() {
 			rootUser, err := user.NewRoot(rootID, now)
 			Expect(err).ToNot(HaveOccurred())
 
-			childUser, err := user.New(childID, rootID, now)
+			childUser, err := user.New(childID, user.Member, rootID, now)
 			Expect(err).ToNot(HaveOccurred())
 
 			err = srg.RunInTransaction(ctx, func(outerCtx context.Context) error {
@@ -140,7 +140,7 @@ var _ = Describe("Storage Transactions & RunInTransaction", func() {
 			innerErr := errors.New("inner failure")
 
 			rootUser, _ := user.NewRoot(rootID, now)
-			childUser, _ := user.New(childID, rootID, now)
+			childUser, _ := user.New(childID, user.Member, rootID, now)
 
 			err := srg.RunInTransaction(ctx, func(outerCtx context.Context) error {
 				Expect(userRepo.Save(outerCtx, rootUser)).To(Succeed())
