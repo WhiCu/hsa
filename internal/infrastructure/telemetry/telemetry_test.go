@@ -8,15 +8,22 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/knadh/koanf/v2"
 	"github.com/knadh/koanf/providers/confmap"
+	"github.com/knadh/koanf/v2"
 	"github.com/samber/do/v2"
-
-	"github.com/whicu/hsa/internal/infrastructure/telemetry"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
-	"go.opentelemetry.io/otel/sdk/resource"
+
+	"github.com/whicu/hsa/internal/infrastructure/telemetry"
+)
+
+const (
+	constVersion  = "1.0.0"
+	constEnv      = "dev"
+	constEndpoint = "127.0.0.1:4317"
+	constAlways   = "always"
 )
 
 func TestTelemetry(t *testing.T) {
@@ -64,12 +71,12 @@ var _ = Describe("Telemetry Initialization", func() {
 		ctx = context.Background()
 		cfg = telemetry.Config{
 			ServiceName:    "test-service",
-			ServiceVersion: "1.0.0",
-			Environment:    "dev",
+			ServiceVersion: constVersion,
+			Environment:    constEnv,
 			Enabled:        true,
 			Exporter: telemetry.ExporterConfig{
 				Conn: telemetry.ConnConfig{
-					Endpoint:   "127.0.0.1:4317",
+					Endpoint:   constEndpoint,
 					MaxMsgSize: 1024,
 					Insecure:   true,
 					Compressor: "gzip",
@@ -86,7 +93,7 @@ var _ = Describe("Telemetry Initialization", func() {
 				Timeout: 2 * time.Second,
 			},
 			Sampler: telemetry.SamplerConfig{
-				Type: "always",
+				Type: constAlways,
 			},
 			Metric: telemetry.MetricConfig{
 				Interval: 5 * time.Second,
@@ -136,7 +143,7 @@ var _ = Describe("Telemetry Initialization", func() {
 
 		Describe("InitTracerProvider", func() {
 			It("initializes with always sampler", func() {
-				cfg.Sampler.Type = "always"
+				cfg.Sampler.Type = constAlways
 				tp, err := telemetry.InitTracerProvider(ctx, cfg, res, conn)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(tp).NotTo(BeNil())
@@ -190,18 +197,18 @@ var _ = Describe("Telemetry Package DI", func() {
 		// Setup config via koanf
 		k := koanf.New(".")
 		err := k.Load(confmap.Provider(map[string]any{
-			"telemetry.service_name": "di-test",
-			"telemetry.service_version": "1.0.0",
-			"telemetry.environment": "dev",
-			"telemetry.enabled": true,
-			"telemetry.exporter.timeout": "2s",
-			"telemetry.exporter.conn.endpoint": "127.0.0.1:4317",
-			"telemetry.exporter.conn.keep_alive.time": "10s",
+			"telemetry.service_name":                     "di-test",
+			"telemetry.service_version":                  constVersion,
+			"telemetry.environment":                      constEnv,
+			"telemetry.enabled":                          true,
+			"telemetry.exporter.timeout":                 "2s",
+			"telemetry.exporter.conn.endpoint":           constEndpoint,
+			"telemetry.exporter.conn.keep_alive.time":    "10s",
 			"telemetry.exporter.conn.keep_alive.timeout": "2s",
 			"telemetry.exporter.conn.backoff.base_delay": "1s",
-			"telemetry.exporter.conn.backoff.max_delay": "5s",
-			"telemetry.sampler.type": "always",
-			"telemetry.metric.interval": "5s",
+			"telemetry.exporter.conn.backoff.max_delay":  "5s",
+			"telemetry.sampler.type":                     constAlways,
+			"telemetry.metric.interval":                  "5s",
 		}, "."), nil)
 		Expect(err).NotTo(HaveOccurred())
 		do.ProvideValue[*koanf.Koanf](injector, k)
@@ -249,18 +256,18 @@ var _ = Describe("Telemetry Package DI", func() {
 		do.ProvideValue[context.Context](injectorDisabled, context.Background())
 		k := koanf.New(".")
 		err := k.Load(confmap.Provider(map[string]any{
-			"telemetry.service_name": "di-test",
-			"telemetry.service_version": "1.0.0",
-			"telemetry.environment": "dev",
-			"telemetry.enabled": false, // Disabled
-			"telemetry.exporter.timeout": "2s",
-			"telemetry.exporter.conn.endpoint": "127.0.0.1:4317",
-			"telemetry.exporter.conn.keep_alive.time": "10s",
+			"telemetry.service_name":                     "di-test",
+			"telemetry.service_version":                  constVersion,
+			"telemetry.environment":                      constEnv,
+			"telemetry.enabled":                          false, // Disabled
+			"telemetry.exporter.timeout":                 "2s",
+			"telemetry.exporter.conn.endpoint":           constEndpoint,
+			"telemetry.exporter.conn.keep_alive.time":    "10s",
 			"telemetry.exporter.conn.keep_alive.timeout": "2s",
 			"telemetry.exporter.conn.backoff.base_delay": "1s",
-			"telemetry.exporter.conn.backoff.max_delay": "5s",
-			"telemetry.sampler.type": "always",
-			"telemetry.metric.interval": "5s",
+			"telemetry.exporter.conn.backoff.max_delay":  "5s",
+			"telemetry.sampler.type":                     constAlways,
+			"telemetry.metric.interval":                  "5s",
 		}, "."), nil)
 		Expect(err).NotTo(HaveOccurred())
 		do.ProvideValue[*koanf.Koanf](injectorDisabled, k)
