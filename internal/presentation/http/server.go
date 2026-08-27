@@ -90,11 +90,12 @@ func NewRouter(
 func newErrorHandler(log *slog.Logger) func(context.Context, http.ResponseWriter, *http.Request, error) {
 	return func(ctx context.Context, w http.ResponseWriter, _ *http.Request, err error) {
 		if secErr, ok := errors.AsType[*ogenerrors.SecurityError](err); ok {
-			if errors.Is(secErr, ErrUnauthenticated) {
+			switch {
+			case errors.Is(secErr, ErrForbidden):
+				writeForbidden(ctx, log, w)
+			default:
 				writeUnauthorized(ctx, log, w)
-				return
 			}
-			writeUnauthorized(ctx, log, w)
 			return
 		}
 		if sizeErr, ok := errors.AsType[*http.MaxBytesError](err); ok {
@@ -139,6 +140,19 @@ func writeUnauthorized(ctx context.Context, log *slog.Logger, w http.ResponseWri
 		NewErrorResponse[api.ErrorResponse](
 			api.ErrorResponseErrorCodeUNAUTHORIZED,
 			"unauthorized",
+		),
+	)
+}
+
+func writeForbidden(ctx context.Context, log *slog.Logger, w http.ResponseWriter) {
+	writeError(
+		ctx,
+		log,
+		w,
+		http.StatusForbidden,
+		NewErrorResponse[api.ErrorResponse](
+			api.ErrorResponseErrorCodeFORBIDDEN,
+			"insufficient permissions",
 		),
 	)
 }
