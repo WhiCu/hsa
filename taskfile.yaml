@@ -75,6 +75,19 @@ tasks:
     desc: Test all
     cmds:
       - go test -v -cover --race ./...
+  test:ginkgo:
+    desc: Test all with ginkgo
+    cmds:
+      - ginkgo run --race -r --procs=8 --tags=testcontainers --timeout=10m --randomize-all
+  test:ginkgo:pprof:
+    desc: Test all with ginkgo and pprof
+    cmds:
+      - ginkgo run --race -r --tags=testcontainers --timeout=10m --randomize-all
+        --output-dir=./profiles
+        --mutexprofile=mutex.out --mutexprofilefraction=1
+        --blockprofile=block.out
+        --memprofile=mem.out --memprofilerate=1
+        --poll-progress-after=10s
 
 # ── Air ───────────────────────────────────────────────────────────────────────
 
