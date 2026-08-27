@@ -24,26 +24,35 @@ func (tv *AccessTokenVerifier) String() string {
 	return "AccessTokenVerifier{publicKey: ***REDACTED***}"
 }
 
-func (tv *AccessTokenVerifier) Verify(tokenStr string) (user.UserID, error) {
+func (tv *AccessTokenVerifier) Verify(tokenStr string) (user.UserID, user.Role, error) {
 	parser := paseto.NewParser()
 
 	token, err := parser.ParseV4Public(tv.publicKey, tokenStr, nil)
 	if err != nil {
 		if err, ok := errors.AsType[paseto.RuleError](err); ok {
-			return user.UserID{}, errors.Join(ErrTokenExpired, err)
+			return user.UserID{}, user.Unknown, errors.Join(ErrTokenExpired, err)
 		}
-		return user.UserID{}, ErrTokenMalformed
+		return user.UserID{}, user.Unknown, ErrTokenMalformed
 	}
 
 	raw, err := token.GetString("user_id")
 	if err != nil {
-		return user.UserID{}, ErrTokenMalformed
+		return user.UserID{}, user.Unknown, ErrTokenMalformed
 	}
 
 	userID, err := uuid.Parse(raw)
 	if err != nil {
-		return user.UserID{}, ErrTokenMalformed
+		return user.UserID{}, user.Unknown, ErrTokenMalformed
 	}
 
-	return userID, nil
+	rawRole, errClaim := token.GetString("role")
+	if errClaim != nil {
+		return user.UserID{}, user.Unknown, ErrTokenMalformed
+	}
+	role, errRole := user.RoleFromString(rawRole)
+	if errRole != nil {
+		return user.UserID{}, user.Unknown, ErrTokenMalformed
+	}
+
+	return userID, role, nil
 }
