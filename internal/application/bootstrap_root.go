@@ -1,4 +1,3 @@
-// internal/application/bootstrap_root.go
 package application
 
 import (

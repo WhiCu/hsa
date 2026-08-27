@@ -26,6 +26,7 @@ type RefreshAccessToken struct {
 	revokeUser    *RevokeAllUserSessions
 	sessionIssuer *SessionIssuer
 	hasher        HashGenerator
+	transactor    Transactor
 }
 
 func NewRefreshAccessToken(
@@ -34,6 +35,7 @@ func NewRefreshAccessToken(
 	revokeUser *RevokeAllUserSessions,
 	sessionIssuer *SessionIssuer,
 	hasher HashGenerator,
+	transactor Transactor,
 ) *RefreshAccessToken {
 	return &RefreshAccessToken{
 		log:           log,
@@ -41,26 +43,52 @@ func NewRefreshAccessToken(
 		revokeUser:    revokeUser,
 		sessionIssuer: sessionIssuer,
 		hasher:        hasher,
+		transactor:    transactor,
 	}
 }
 
 func (uc *RefreshAccessToken) Execute(ctx context.Context, rawRefreshToken string) (accessToken, refreshToken string, err error) {
 	uc.log.DebugContext(ctx, "executing refresh access token")
 
-	now := time.Now()
+	var (
+		oldRT *session.RefreshToken
+		now   time.Time
+	)
 
-	oldRT, err := uc.validateRefreshToken(ctx, rawRefreshToken, now)
-	if err != nil {
-		return "", "", err
-	}
+	err = uc.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
+		now = time.Now()
 
-	accessToken, refreshToken, err = uc.sessionIssuer.Rotate(ctx, oldRT, now)
+		var txErr error
+		oldRT, txErr = uc.validateRefreshToken(ctx, rawRefreshToken, now)
+		if txErr != nil {
+			uc.log.ErrorContext(ctx, "refresh access token validation failed",
+				slog.Any("error", txErr),
+			)
+			return txErr
+		}
+
+		accessToken, refreshToken, txErr = uc.sessionIssuer.Rotate(ctx, oldRT, now)
+		if txErr != nil {
+			uc.log.ErrorContext(ctx, "refresh access token rotation failed",
+				slog.String("user_id", oldRT.UserID().String()),
+				slog.String("old_session_id", oldRT.ID().String()),
+				slog.Any("error", txErr),
+			)
+			return txErr
+		}
+		return nil
+	})
+
 	if err != nil {
-		uc.log.ErrorContext(ctx, "refresh access token transaction failed",
-			slog.String("user_id", oldRT.UserID().String()),
-			slog.String("old_session_id", oldRT.ID().String()),
-			slog.Any("error", err),
-		)
+		if oldRT != nil {
+			uc.log.ErrorContext(ctx, "refresh access token transaction failed",
+				slog.String("user_id", oldRT.UserID().String()),
+				slog.String("old_session_id", oldRT.ID().String()),
+				slog.Any("error", err),
+			)
+		} else {
+			uc.log.ErrorContext(ctx, "refresh access token transaction failed", slog.Any("error", err))
+		}
 		return "", "", err
 	}
 

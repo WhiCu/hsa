@@ -23,7 +23,6 @@ var _ = Describe("AccessTokenIssuer & AccessTokenVerifier", func() {
 	)
 
 	BeforeEach(func() {
-
 		injector = do.New(crypto.Package)
 		do.OverrideValue(injector, testConfig)
 
@@ -41,52 +40,121 @@ var _ = Describe("AccessTokenIssuer & AccessTokenVerifier", func() {
 
 	Describe("IssueAccessToken & Verify", func() {
 		It("successfully issues and verifies a signed PASETO v4 public access token", func() {
-			tokenStr, err := issuer.IssueAccessToken(testUser.ID(), 15*time.Minute)
+			tokenStr, err := issuer.IssueAccessToken(testUser.ID(), user.Member, 15*time.Minute)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tokenStr).NotTo(BeEmpty())
 			Expect(tokenStr).To(HavePrefix("v4.public."))
 
-			verifiedUserID, err := verifier.Verify(tokenStr)
+			verifiedUserID, verifiedRole, err := verifier.Verify(tokenStr)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(verifiedUserID).To(Equal(testUser.ID()))
+			Expect(verifiedRole).To(Equal(user.Member))
+		})
+
+		It("round-trips the admin role through the token claim", func() {
+			tokenStr, err := issuer.IssueAccessToken(testUser.ID(), user.Admin, 15*time.Minute)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, verifiedRole, err := verifier.Verify(tokenStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(verifiedRole).To(Equal(user.Admin))
+		})
+
+		It("returns ErrTokenMalformed and zero values for an unknown role claim value", func() {
+			token := paseto.NewToken()
+			token.SetExpiration(time.Now().Add(time.Minute))
+			token.SetString("user_id", userID.String())
+			token.SetString("role", "superadmin")
+
+			asymKey := paseto.NewV4AsymmetricSecretKey()
+			tokenStr := token.V4Sign(asymKey, nil)
+
+			customVerifier := crypto.NewAccessTokenVerifier(asymKey.Public())
+			id, role, err := customVerifier.Verify(tokenStr)
+
+			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
 		})
 
 		It("returns ErrTokenExpired when verifying an expired access token", func() {
-			tokenStr, err := issuer.IssueAccessToken(testUser.ID(), -time.Minute)
+			tokenStr, err := issuer.IssueAccessToken(testUser.ID(), user.Member, -time.Minute)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = verifier.Verify(tokenStr)
+			id, role, err := verifier.Verify(tokenStr)
 			Expect(err).To(MatchError(crypto.ErrTokenExpired))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
 		})
 
 		It("returns ErrTokenMalformed when token was signed by a different private key", func() {
 			otherKey := paseto.NewV4AsymmetricSecretKey()
 			otherIssuer := crypto.NewAccessTokenIssuer(otherKey)
 
-			tokenStr, err := otherIssuer.IssueAccessToken(testUser.ID(), 15*time.Minute)
+			tokenStr, err := otherIssuer.IssueAccessToken(testUser.ID(), user.Member, 15*time.Minute)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = verifier.Verify(tokenStr)
+			id, role, err := verifier.Verify(tokenStr)
 			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
 		})
 
 		It("returns ErrTokenMalformed for a corrupted token string", func() {
-			_, err := verifier.Verify("v4.public.invalid-signature-payload")
+			id, role, err := verifier.Verify("v4.public.invalid-signature-payload")
 			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
 		})
 
 		It("returns ErrTokenMalformed if token is missing the user_id claim", func() {
 			token := paseto.NewToken()
 			token.SetExpiration(time.Now().Add(time.Minute))
+			token.SetString("role", user.Member.String()) // роль есть, user_id нет
 
 			asymKey := paseto.NewV4AsymmetricSecretKey()
 			tokenStr := token.V4Sign(asymKey, nil)
 
 			customVerifier := crypto.NewAccessTokenVerifier(asymKey.Public())
-			_, err := customVerifier.Verify(tokenStr)
+			id, role, err := customVerifier.Verify(tokenStr)
 
 			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
+		})
+
+		It("returns ErrTokenMalformed if token is missing the role claim", func() {
+			token := paseto.NewToken()
+			token.SetExpiration(time.Now().Add(time.Minute))
+			token.SetString("user_id", userID.String()) // user_id есть, роли нет
+
+			asymKey := paseto.NewV4AsymmetricSecretKey()
+			tokenStr := token.V4Sign(asymKey, nil)
+
+			customVerifier := crypto.NewAccessTokenVerifier(asymKey.Public())
+			id, role, err := customVerifier.Verify(tokenStr)
+
+			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
+		})
+
+		It("returns ErrTokenMalformed if user_id is not a valid UUID", func() {
+			token := paseto.NewToken()
+			token.SetExpiration(time.Now().Add(time.Minute))
+			token.SetString("user_id", "not-a-valid-uuid")
+			token.SetString("role", user.Member.String())
+
+			asymKey := paseto.NewV4AsymmetricSecretKey()
+			tokenStr := token.V4Sign(asymKey, nil)
+
+			customVerifier := crypto.NewAccessTokenVerifier(asymKey.Public())
+			id, role, err := customVerifier.Verify(tokenStr)
+
+			Expect(err).To(MatchError(crypto.ErrTokenMalformed))
+			Expect(id).To(Equal(user.UserID{}))
+			Expect(role).To(Equal(user.Unknown))
 		})
 	})
 
@@ -104,12 +172,13 @@ var _ = Describe("AccessTokenIssuer & AccessTokenVerifier", func() {
 			customVerifier, err := do.Invoke[*crypto.AccessTokenVerifier](customInjector)
 			Expect(err).NotTo(HaveOccurred())
 
-			tokenStr, err := customIssuer.IssueAccessToken(userID, 5*time.Minute)
+			tokenStr, err := customIssuer.IssueAccessToken(userID, user.Member, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred())
 
-			verifiedID, err := customVerifier.Verify(tokenStr)
+			verifiedID, verifiedRole, err := customVerifier.Verify(tokenStr)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(verifiedID).To(Equal(userID))
+			Expect(verifiedRole).To(Equal(user.Member))
 		})
 	})
 

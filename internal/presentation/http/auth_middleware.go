@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 
 	api "github.com/whicu/hsa/api/http"
+	"github.com/whicu/hsa/internal/domain/user"
 	"github.com/whicu/hsa/internal/infrastructure/crypto"
 )
 
-var ErrUnauthenticated = errors.New("http: user unauthenticated")
+var (
+	ErrUnauthenticated = errors.New("http: user unauthenticated")
+	ErrForbidden       = errors.New("http: insufficient permissions")
+)
 
 type SecurityHandler struct {
 	log      *slog.Logger
@@ -28,7 +33,7 @@ func (h *SecurityHandler) HandleBearerAuth(ctx context.Context, op api.Operation
 		slog.String("operation", op),
 	)
 
-	userID, err := h.verifier.Verify(t.Token)
+	userID, role, err := h.verifier.Verify(t.Token)
 	if err != nil {
 		switch {
 		case errors.Is(err, crypto.ErrTokenExpired):
@@ -52,10 +57,24 @@ func (h *SecurityHandler) HandleBearerAuth(ctx context.Context, op api.Operation
 		}
 	}
 
+	if len(t.Roles) > 0 && !roleAllowed(role, t.Roles) {
+		h.log.WarnContext(ctx, "privileged endpoint rejected: insufficient role",
+			slog.String("operation", op),
+			slog.String("user_id", userID.String()),
+			slog.String("token_role", role.String()),
+			slog.Any("required_roles", t.Roles),
+		)
+		return ctx, ErrForbidden
+	}
+
 	h.log.DebugContext(ctx, "request successfully authenticated",
 		slog.String("operation", op),
 		slog.String("user_id", userID.String()),
 	)
 
 	return WithUserID(ctx, userID), nil
+}
+
+func roleAllowed(role user.Role, required []string) bool {
+	return slices.Contains(required, role.String())
 }

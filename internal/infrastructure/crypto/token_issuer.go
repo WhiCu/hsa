@@ -23,10 +23,11 @@ func (ti *AccessTokenIssuer) String() string {
 	return "AccessTokenIssuer{secretKey: ***REDACTED***}"
 }
 
-func (ti *AccessTokenIssuer) IssueAccessToken(userID user.UserID, ttl time.Duration) (string, error) {
+func (ti *AccessTokenIssuer) IssueAccessToken(userID user.UserID, role user.Role, ttl time.Duration) (string, error) {
 	token := paseto.NewToken()
 	token.SetExpiration(time.Now().Add(ttl))
 	token.SetString("user_id", userID.String())
+	token.SetString("role", role.String())
 
 	return token.V4Sign(ti.secretKey, nil), nil
 }

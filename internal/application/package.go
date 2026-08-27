@@ -165,6 +165,16 @@ func newSessionIssuer(i do.Injector) (*SessionIssuer, error) {
 		return nil, err
 	}
 
+	users, err := do.InvokeAs[UserFinderByID](i)
+	if err != nil {
+		return nil, err
+	}
+
+	transactor, err := do.InvokeAs[Transactor](i)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg, err := do.Invoke[Config](i)
 	if err != nil {
 		return nil, err
@@ -178,6 +188,8 @@ func newSessionIssuer(i do.Injector) (*SessionIssuer, error) {
 		refreshTokens,
 		accessTokens,
 		ids,
+		users,
+		transactor,
 		cfgSession.RefreshTTL,
 		cfgSession.AccessTTL,
 	), nil
@@ -189,12 +201,22 @@ func newFinishInviteRegistration(i do.Injector) (*FinishInviteRegistration, erro
 		return nil, err
 	}
 
-	invites, err := do.InvokeAs[InviteFinderByID](i)
+	invitesFinder, err := do.InvokeAs[InviteFinderByID](i)
 	if err != nil {
 		return nil, err
 	}
 
-	users, err := do.InvokeAs[UserSaver](i)
+	inviteSaver, err := do.InvokeAs[InviteSaver](i)
+	if err != nil {
+		return nil, err
+	}
+
+	userFinder, err := do.InvokeAs[UserFinderByID](i)
+	if err != nil {
+		return nil, err
+	}
+
+	userSaver, err := do.InvokeAs[UserSaver](i)
 	if err != nil {
 		return nil, err
 	}
@@ -237,8 +259,10 @@ func newFinishInviteRegistration(i do.Injector) (*FinishInviteRegistration, erro
 
 	return NewFinishInviteRegistration(
 		log,
-		invites,
-		users,
+		invitesFinder,
+		inviteSaver,
+		userFinder,
+		userSaver,
 		credentials,
 		keys,
 		sessionIssuer,
@@ -390,12 +414,18 @@ func newRefreshAccessToken(i do.Injector) (*RefreshAccessToken, error) {
 		return nil, err
 	}
 
+	transactor, err := do.InvokeAs[Transactor](i)
+	if err != nil {
+		return nil, err
+	}
+
 	return NewRefreshAccessToken(
 		log,
 		sessions,
 		revokeUser,
 		sessionIssuer,
 		hasher,
+		transactor,
 	), nil
 }
 

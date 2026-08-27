@@ -39,8 +39,8 @@ func (_m *TokenIssuer) EXPECT() *TokenIssuer_Expecter {
 }
 
 // IssueAccessToken provides a mock function for the type TokenIssuer
-func (_mock *TokenIssuer) IssueAccessToken(userID user.UserID, ttl time.Duration) (string, error) {
-	ret := _mock.Called(userID, ttl)
+func (_mock *TokenIssuer) IssueAccessToken(userID user.UserID, role user.Role, ttl time.Duration) (string, error) {
+	ret := _mock.Called(userID, role, ttl)
 
 	if len(ret) == 0 {
 		panic("no return value specified for IssueAccessToken")
@@ -48,16 +48,16 @@ func (_mock *TokenIssuer) IssueAccessToken(userID user.UserID, ttl time.Duration
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(user.UserID, time.Duration) (string, error)); ok {
-		return returnFunc(userID, ttl)
+	if returnFunc, ok := ret.Get(0).(func(user.UserID, user.Role, time.Duration) (string, error)); ok {
+		return returnFunc(userID, role, ttl)
 	}
-	if returnFunc, ok := ret.Get(0).(func(user.UserID, time.Duration) string); ok {
-		r0 = returnFunc(userID, ttl)
+	if returnFunc, ok := ret.Get(0).(func(user.UserID, user.Role, time.Duration) string); ok {
+		r0 = returnFunc(userID, role, ttl)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(user.UserID, time.Duration) error); ok {
-		r1 = returnFunc(userID, ttl)
+	if returnFunc, ok := ret.Get(1).(func(user.UserID, user.Role, time.Duration) error); ok {
+		r1 = returnFunc(userID, role, ttl)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -71,24 +71,30 @@ type TokenIssuer_IssueAccessToken_Call struct {
 
 // IssueAccessToken is a helper method to define mock.On call
 //   - userID user.UserID
+//   - role user.Role
 //   - ttl time.Duration
-func (_e *TokenIssuer_Expecter) IssueAccessToken(userID any, ttl any) *TokenIssuer_IssueAccessToken_Call {
-	return &TokenIssuer_IssueAccessToken_Call{Call: _e.mock.On("IssueAccessToken", userID, ttl)}
+func (_e *TokenIssuer_Expecter) IssueAccessToken(userID any, role any, ttl any) *TokenIssuer_IssueAccessToken_Call {
+	return &TokenIssuer_IssueAccessToken_Call{Call: _e.mock.On("IssueAccessToken", userID, role, ttl)}
 }
 
-func (_c *TokenIssuer_IssueAccessToken_Call) Run(run func(userID user.UserID, ttl time.Duration)) *TokenIssuer_IssueAccessToken_Call {
+func (_c *TokenIssuer_IssueAccessToken_Call) Run(run func(userID user.UserID, role user.Role, ttl time.Duration)) *TokenIssuer_IssueAccessToken_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 user.UserID
 		if args[0] != nil {
 			arg0 = args[0].(user.UserID)
 		}
-		var arg1 time.Duration
+		var arg1 user.Role
 		if args[1] != nil {
-			arg1 = args[1].(time.Duration)
+			arg1 = args[1].(user.Role)
+		}
+		var arg2 time.Duration
+		if args[2] != nil {
+			arg2 = args[2].(time.Duration)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -99,7 +105,7 @@ func (_c *TokenIssuer_IssueAccessToken_Call) Return(s string, err error) *TokenI
 	return _c
 }
 
-func (_c *TokenIssuer_IssueAccessToken_Call) RunAndReturn(run func(userID user.UserID, ttl time.Duration) (string, error)) *TokenIssuer_IssueAccessToken_Call {
+func (_c *TokenIssuer_IssueAccessToken_Call) RunAndReturn(run func(userID user.UserID, role user.Role, ttl time.Duration) (string, error)) *TokenIssuer_IssueAccessToken_Call {
 	_c.Call.Return(run)
 	return _c
 }

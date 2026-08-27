@@ -1,11 +1,13 @@
 -- name: SaveUser :exec
 INSERT INTO users (
     id,
+    role,
     invited_by,
     created_at
 )
 VALUES (
     sqlc.arg(id),
+    sqlc.arg(role),
     sqlc.narg(invited_by),
     sqlc.arg(created_at)
 );
@@ -13,6 +15,8 @@ VALUES (
 -- name: FindRootUser :one
 SELECT * FROM users WHERE invited_by IS NULL LIMIT 1;
 
+-- name: FindUserByID :one
+SELECT * FROM users WHERE id = sqlc.arg(id);
 
 -- name: ListDescendantUserIDs :many
 WITH RECURSIVE compromised_chain AS (
