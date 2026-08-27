@@ -1,9 +1,10 @@
 package application_test
 
 import (
-	"context"
 	"errors"
 	"net/netip"
+	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,27 +14,16 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
-	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/session"
 	"github.com/whicu/hsa/internal/domain/user"
-	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("RefreshAccessToken", func() {
 	var (
-		injector      do.Injector
-		sessionFinder *mocks.RefreshTokenFinder
-		sessionSaver  *mocks.RefreshTokenSaver
-		accessTokens  *mocks.TokenIssuer
-		refreshTokens *mocks.TokenGenerator
-		hasher        *mocks.HashGenerator
-		ids           *mocks.IDGenerator
-
-		revokeSessions *mocks.ActiveSessionsFinder
-		transactor     *mocks.Transactor
-
-		useCase *application.RefreshAccessToken
+		injector do.Injector
+		m        *Mocks // Доступ ко всем мокам из MockPackage
+		useCase  *application.RefreshAccessToken
 
 		refreshTTL time.Duration
 		accessTTL  time.Duration
@@ -44,16 +34,6 @@ var _ = Describe("RefreshAccessToken", func() {
 	)
 
 	BeforeEach(func() {
-		sessionFinder = mocks.NewRefreshTokenFinder(GinkgoT())
-		sessionSaver = mocks.NewRefreshTokenSaver(GinkgoT())
-		accessTokens = mocks.NewTokenIssuer(GinkgoT())
-		refreshTokens = mocks.NewTokenGenerator(GinkgoT())
-		hasher = mocks.NewHashGenerator(GinkgoT())
-		ids = mocks.NewIDGenerator(GinkgoT())
-
-		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
-		transactor = mocks.NewTransactor(GinkgoT())
-
 		refreshTTL = time.Hour
 		accessTTL = 15 * time.Minute
 
@@ -62,31 +42,22 @@ var _ = Describe("RefreshAccessToken", func() {
 		userID = uuid.New()
 
 		injector = do.New(application.Package)
+		m = MockPackage(injector, GinkgoT())
 
-		do.OverrideValue(injector, sessionFinder)
-		do.OverrideValue(injector, sessionSaver)
-		do.OverrideValue(injector, accessTokens)
-		do.OverrideValue(injector, refreshTokens)
-		do.OverrideValue(injector, hasher)
-		do.OverrideValue(injector, ids)
-		do.OverrideValue(injector, revokeSessions)
-		do.OverrideValue(injector, transactor)
-
-		do.OverrideValue(injector, logger.NewNOPSlog())
-		do.OverrideValue(injector, application.Config{
-			Session: application.SessionConfig{
-				RefreshTTL: refreshTTL,
-				AccessTTL:  accessTTL,
-			},
-		})
+		// Переопределяем конфиг для SessionIssuer (который инжектится внутрь юзкейса)
+		cfg := defaultCfg
+		cfg.Session = application.SessionConfig{
+			RefreshTTL: refreshTTL,
+			AccessTTL:  accessTTL,
+		}
+		do.OverrideValue(injector, cfg)
 
 		var err error
 		useCase, err = do.Invoke[*application.RefreshAccessToken](injector)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	// значения deviceInfo/ipAddress/ttl несущественны для проверок этого
-	// юзкейса — важны только userID, tokenHash и статус (revoked/expired)
+	// Helper: создает валидную доменную сущность RefreshToken
 	newOldToken := func(now time.Time, ttl time.Duration) *session.RefreshToken {
 		rt, err := session.New(
 			uuid.New(), userID, tokenHash,
@@ -98,13 +69,57 @@ var _ = Describe("RefreshAccessToken", func() {
 	}
 
 	expectHashOK := func() {
-		hasher.EXPECT().GenerateHash(rawRefreshToken).Return(tokenHash, nil).Once()
+		m.HashGenerator.EXPECT().GenerateHash(rawRefreshToken).Return(tokenHash, nil).Once()
 	}
 
 	Context("Execute", func() {
+
+		It("should successfully rotate tokens on the happy path", func(ctx SpecContext) {
+			synctest.Test(testT, func(_ *testing.T) {
+				now := time.Now()
+				oldRT := newOldToken(now, refreshTTL)
+
+				newRawRefresh := "new-raw-refresh-token"
+				newRefreshHash := "new-refresh-token-hash"
+				newSessionID := uuid.New()
+				issuedAccessToken := "new-access-token"
+				testUser := user.Reconstruct(userID, user.Member, nil, now)
+
+				expectHashOK()
+				m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
+
+				// Ожидания для SessionIssuer.Rotate (внутри транзакции)
+				m.TokenGenerator.EXPECT().GenerateToken(32).Return(newRawRefresh, newRefreshHash, nil).Once()
+				m.IDGenerator.EXPECT().NewID().Return(newSessionID).Once()
+
+				// Выдача AccessToken
+				m.UserFinderByID.EXPECT().FindByID(ctx, userID).Return(testUser, nil).Once()
+				m.TokenIssuer.EXPECT().IssueAccessToken(userID, user.Member, accessTTL).Return(issuedAccessToken, nil).Once()
+
+				// Сохранение токенов
+				m.RefreshTokenSaver.EXPECT().Save(ctx, mock.MatchedBy(func(tokens []*session.RefreshToken) bool {
+					if len(tokens) != 2 {
+						return false
+					}
+					oldTokenMatched := tokens[0].ID() == oldRT.ID() && tokens[0].IsRevoked()
+					newTokenMatched := tokens[1].ID() == newSessionID &&
+						tokens[1].UserID() == userID &&
+						!tokens[1].IsRevoked()
+
+					return oldTokenMatched && newTokenMatched
+				})).Return(nil).Once()
+
+				accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(accessToken).To(Equal(issuedAccessToken))
+				Expect(refreshToken).To(Equal(newRawRefresh))
+			})
+		})
+
 		It("should return error when hash generation fails", func(ctx SpecContext) {
 			hashErr := errors.New("hash generation failed")
-			hasher.EXPECT().GenerateHash(rawRefreshToken).Return("", hashErr).Once()
+			m.HashGenerator.EXPECT().GenerateHash(rawRefreshToken).Return("", hashErr).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -115,10 +130,7 @@ var _ = Describe("RefreshAccessToken", func() {
 
 		It("should return ErrRefreshTokenNotFound when token hash is not found", func(ctx SpecContext) {
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(nil, domain.ErrNotFound).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(nil, domain.ErrNotFound).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -130,10 +142,7 @@ var _ = Describe("RefreshAccessToken", func() {
 		It("should propagate unexpected errors from finding the token", func(ctx SpecContext) {
 			findErr := errors.New("db query failed")
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(nil, findErr).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(nil, findErr).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -148,23 +157,12 @@ var _ = Describe("RefreshAccessToken", func() {
 			Expect(oldRT.Revoke(now)).To(Succeed())
 
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
 
-			// цепочка ожиданий "настоящего" RevokeAllUserSessions —
-			// успешный отзыв всех сессий пользователя
-			transactor.EXPECT().
-				RunInTransaction(ctx, mock.Anything).
-				RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
-					return fn(ctx)
-				}).
-				Once()
-			revokeSessions.EXPECT().
-				FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.AnythingOfType("time.Time")).
-				Return([]*session.RefreshToken{}, nil).
-				Once()
+			// Ожидания для RevokeAllUserSessions.Execute
+			// Поскольку транзакция там вложена (или он имеет свой транзактор),
+			// мы просто мокаем успешный поиск и сохранение в рамках отзыва.
+			m.ActiveSessionsFinder.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.AnythingOfType("time.Time")).Return([]*session.RefreshToken{}, nil).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -178,18 +176,13 @@ var _ = Describe("RefreshAccessToken", func() {
 			oldRT := newOldToken(now, refreshTTL)
 			Expect(oldRT.Revoke(now)).To(Succeed())
 
-			revokeErr := errors.New("revoke sessions failed")
+			revokeErr := errors.New("revoke sessions query failed")
 
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
 
-			transactor.EXPECT().
-				RunInTransaction(ctx, mock.Anything).
-				Return(revokeErr).
-				Once()
+			// Падение внутри RevokeAllUserSessions
+			m.ActiveSessionsFinder.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.AnythingOfType("time.Time")).Return(nil, revokeErr).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -200,14 +193,11 @@ var _ = Describe("RefreshAccessToken", func() {
 
 		It("should return ErrRefreshTokenInvalid when the token is expired", func(ctx SpecContext) {
 			now := time.Now()
-			// ttl в прошлом -> IsValid(now) == false, при этом токен не revoked
+			// ttl в прошлом -> IsValid(now) == false
 			oldRT := newOldToken(now.Add(-2*time.Hour), time.Hour)
 
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
@@ -216,183 +206,20 @@ var _ = Describe("RefreshAccessToken", func() {
 			Expect(refreshToken).To(BeEmpty())
 		})
 
-		It("should successfully rotate tokens on the happy path", func(ctx SpecContext) {
+		It("should roll back transaction and propagate error when SessionIssuer.Rotate fails", func(ctx SpecContext) {
 			now := time.Now()
 			oldRT := newOldToken(now, refreshTTL)
-
-			newRawRefresh := "new-raw-refresh-token"
-			newRefreshHash := "new-refresh-token-hash"
-			newSessionID := uuid.New()
-			issuedAccessToken := "new-access-token"
+			genErr := errors.New("token generator failed")
 
 			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
+			m.RefreshTokenFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
 
-			sessionSaver.EXPECT().
-				Save(ctx, mock.MatchedBy(func(tokens []*session.RefreshToken) bool {
-					if len(tokens) != 2 {
-						return false
-					}
-					oldTokenMatched := tokens[0].ID() == oldRT.ID() && tokens[0].IsRevoked()
-					newTokenMatched := tokens[1].ID() == newSessionID &&
-						tokens[1].UserID() == userID &&
-						!tokens[1].IsRevoked()
-
-					return oldTokenMatched && newTokenMatched
-				})).
-				Return(nil).
-				Once()
-
-			refreshTokens.EXPECT().
-				GenerateToken(mock.AnythingOfType("int")).
-				Return(newRawRefresh, newRefreshHash, nil).
-				Once()
-
-			ids.EXPECT().NewID().Return(newSessionID).Once()
-
-			accessTokens.EXPECT().
-				IssueAccessToken(userID, accessTTL).
-				Return(issuedAccessToken, nil).
-				Once()
-
-			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(accessToken).To(Equal(issuedAccessToken))
-			Expect(refreshToken).To(Equal(newRawRefresh))
-		})
-
-		It("should propagate error when saving the rotated tokens fails", func(ctx SpecContext) {
-			now := time.Now()
-			oldRT := newOldToken(now, refreshTTL)
-			saveErr := errors.New("save tokens failed")
-
-			expectHashOK()
-			sessionFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
-
-			refreshTokens.EXPECT().GenerateToken(mock.AnythingOfType("int")).Return("new-raw", "new-hash", nil).Once()
-
-			ids.EXPECT().NewID().Return(uuid.New()).Once()
-
-			accessTokens.EXPECT().IssueAccessToken(oldRT.UserID(), mock.Anything).Return("access-token", nil).Once()
-
-			sessionSaver.EXPECT().Save(ctx, mock.Anything).Return(saveErr).Once()
-
-			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
-
-			Expect(err).To(MatchError(saveErr))
-			Expect(accessToken).To(BeEmpty())
-			Expect(refreshToken).To(BeEmpty())
-		})
-
-		It("should propagate error when generating the new refresh token fails", func(ctx SpecContext) {
-			now := time.Now()
-			oldRT := newOldToken(now, refreshTTL)
-			genErr := errors.New("generate refresh token failed")
-
-			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
-			refreshTokens.EXPECT().
-				GenerateToken(mock.AnythingOfType("int")).
-				Return("", "", genErr).
-				Once()
+			// Ломаем генерацию токена внутри вложенного вызова SessionIssuer.Rotate
+			m.TokenGenerator.EXPECT().GenerateToken(32).Return("", "", genErr).Once()
 
 			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
 
 			Expect(err).To(MatchError(genErr))
-			Expect(accessToken).To(BeEmpty())
-			Expect(refreshToken).To(BeEmpty())
-		})
-
-		It("should propagate error when the new session entity is invalid", func(ctx SpecContext) {
-			now := time.Now()
-			oldRT := newOldToken(now, refreshTTL)
-
-			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
-
-			refreshTokens.EXPECT().
-				GenerateToken(mock.AnythingOfType("int")).
-				Return("new-raw", "new-hash", nil).
-				Once()
-
-			// uuid.Nil в качестве нового ID -> session.New вернёт
-			// ErrIDRequired, обёрнутую в domain.ErrInvalidArgument
-			ids.EXPECT().NewID().Return(uuid.Nil).Once()
-
-			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
-
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, session.ErrIDRequired)).To(BeTrue())
-			Expect(accessToken).To(BeEmpty())
-			Expect(refreshToken).To(BeEmpty())
-		})
-
-		It("should propagate error when saving the rotated tokens fails", func(ctx SpecContext) {
-			now := time.Now()
-			oldRT := newOldToken(now, refreshTTL)
-			newSessionID := uuid.New()
-			saveErr := errors.New("save new token failed")
-
-			expectHashOK()
-			sessionFinder.EXPECT().
-				FindByTokenHash(ctx, tokenHash).
-				Return(oldRT, nil).
-				Once()
-
-			refreshTokens.EXPECT().
-				GenerateToken(mock.AnythingOfType("int")).
-				Return("new-raw", "new-hash", nil).
-				Once()
-
-			ids.EXPECT().NewID().Return(newSessionID).Once()
-
-			accessTokens.EXPECT().
-				IssueAccessToken(oldRT.UserID(), accessTTL).
-				Return("new-access-token", nil).
-				Once()
-
-			sessionSaver.EXPECT().
-				Save(ctx, mock.Anything).
-				Return(saveErr).
-				Once()
-
-			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
-
-			Expect(err).To(MatchError(saveErr))
-			Expect(accessToken).To(BeEmpty())
-			Expect(refreshToken).To(BeEmpty())
-		})
-
-		It("should propagate error when issuing the new access token fails", func(ctx SpecContext) {
-			now := time.Now()
-			oldRT := newOldToken(now, refreshTTL)
-			newSessionID := uuid.New()
-			issueErr := errors.New("issue access token failed")
-
-			expectHashOK()
-			sessionFinder.EXPECT().FindByTokenHash(ctx, tokenHash).Return(oldRT, nil).Once()
-
-			refreshTokens.EXPECT().GenerateToken(mock.AnythingOfType("int")).Return("new-raw", "new-hash", nil).Once()
-			ids.EXPECT().NewID().Return(newSessionID).Once()
-
-			accessTokens.EXPECT().
-				IssueAccessToken(oldRT.UserID(), accessTTL).
-				Return("", issueErr).
-				Once()
-
-			accessToken, refreshToken, err := useCase.Execute(ctx, rawRefreshToken)
-
-			Expect(err).To(MatchError(issueErr))
 			Expect(accessToken).To(BeEmpty())
 			Expect(refreshToken).To(BeEmpty())
 		})

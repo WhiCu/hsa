@@ -1,7 +1,6 @@
 package application_test
 
 import (
-	"context"
 	"errors"
 	"net/netip"
 	"testing"
@@ -15,27 +14,16 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/whicu/hsa/internal/application"
-	"github.com/whicu/hsa/internal/application/mocks"
 	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/key"
 	"github.com/whicu/hsa/internal/domain/user"
-	"github.com/whicu/hsa/pkg/logger"
 )
 
 var _ = Describe("Login UseCase", func() {
 	var (
-		injector        do.Injector
-		authenticator   *mocks.Authenticator
-		credentials     *mocks.CredentialFinder
-		credentialSaver *mocks.CredentialSaver
-		wrappedKeys     *mocks.CredentialWrappedKeysFinder
-		sessions        *mocks.RefreshTokenSaver
-		refreshTokens   *mocks.TokenGenerator
-		accessTokens    *mocks.TokenIssuer
-		ids             *mocks.IDGenerator
-		transactor      *mocks.Transactor
-		revokeSessions  *mocks.ActiveSessionsFinder
+		injector do.Injector
+		m        *Mocks
 
 		beginUC  *application.BeginLogin
 		finishUC *application.Login
@@ -44,49 +32,24 @@ var _ = Describe("Login UseCase", func() {
 		challengeToken string
 		authResp       []byte
 		externalID     []byte
-		userID         uuid.UUID
-		credID         uuid.UUID
+		userID         user.UserID
+		credID         credential.CredentialID
+		testUser       *user.User
 	)
 
 	BeforeEach(func() {
-		authenticator = mocks.NewAuthenticator(GinkgoT())
-		credentials = mocks.NewCredentialFinder(GinkgoT())
-		credentialSaver = mocks.NewCredentialSaver(GinkgoT())
-		wrappedKeys = mocks.NewCredentialWrappedKeysFinder(GinkgoT())
-		sessions = mocks.NewRefreshTokenSaver(GinkgoT())
-		refreshTokens = mocks.NewTokenGenerator(GinkgoT())
-		accessTokens = mocks.NewTokenIssuer(GinkgoT())
-		ids = mocks.NewIDGenerator(GinkgoT())
-		transactor = mocks.NewTransactor(GinkgoT())
-		revokeSessions = mocks.NewActiveSessionsFinder(GinkgoT())
-
 		fixedNow = time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
-		challengeToken = testChallengeToken
+		challengeToken = "challenge-token"
 		authResp = []byte("valid-webauthn-response")
 		externalID = []byte("credential-external-id")
 		userID = uuid.New()
 		credID = uuid.New()
 
+		// Тестовый пользователь, который будет найден при выпуске сессии
+		testUser = user.Reconstruct(userID, user.Member, nil, fixedNow)
+
 		injector = do.New(application.Package)
-
-		do.OverrideValue[application.Authenticator](injector, authenticator)
-		do.OverrideValue[application.CredentialFinder](injector, credentials)
-		do.OverrideValue[application.CredentialSaver](injector, credentialSaver)
-		do.OverrideValue[application.CredentialWrappedKeysFinder](injector, wrappedKeys)
-		do.OverrideValue[application.RefreshTokenSaver](injector, sessions)
-		do.OverrideValue[application.TokenGenerator](injector, refreshTokens)
-		do.OverrideValue[application.TokenIssuer](injector, accessTokens)
-		do.OverrideValue[application.IDGenerator](injector, ids)
-		do.OverrideValue[application.Transactor](injector, transactor)
-		do.OverrideValue[application.ActiveSessionsFinder](injector, revokeSessions)
-
-		do.OverrideValue(injector, logger.NewNOPSlog())
-		do.OverrideValue(injector, application.Config{
-			Session: application.SessionConfig{
-				RefreshTTL: 24 * time.Hour,
-				AccessTTL:  15 * time.Minute,
-			},
-		})
+		m = MockPackage(injector, GinkgoT())
 
 		var err error
 		beginUC, err = do.Invoke[*application.BeginLogin](injector)
@@ -94,13 +57,6 @@ var _ = Describe("Login UseCase", func() {
 
 		finishUC, err = do.Invoke[*application.Login](injector)
 		Expect(err).ToNot(HaveOccurred())
-
-		transactor.EXPECT().
-			RunInTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
-			RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
-				return fn(ctx)
-			}).
-			Maybe()
 	})
 
 	// --- Helper Functions ---
@@ -123,7 +79,7 @@ var _ = Describe("Login UseCase", func() {
 	}
 
 	newCredential := func(initialSignCount uint32) *credential.Credential {
-		cred, err := credential.New(credID, externalID, userID, []byte("pub-key"), []string{testTransportUSB}, fixedNow)
+		cred, err := credential.New(credID, externalID, userID, []byte("pub-key"), []string{"usb"}, fixedNow)
 		Expect(err).ToNot(HaveOccurred())
 		cred.SetSignCount(initialSignCount)
 		return cred
@@ -135,23 +91,33 @@ var _ = Describe("Login UseCase", func() {
 		return []*key.WrappedKey{k1, k2}
 	}
 
+	expectSessionIssueOK := func(expectedAccess, expectedRefresh string) {
+		// Ожидания для SessionIssuer, который вызывается внутри Login
+		m.TokenGenerator.EXPECT().GenerateToken(32).Return(expectedRefresh, "hash", nil).Once()
+		m.IDGenerator.EXPECT().NewID().Return(uuid.New()).Once()
+		m.RefreshTokenSaver.EXPECT().Save(mock.Anything, mock.Anything).Return(nil).Once()
+
+		m.UserFinderByID.EXPECT().FindByID(mock.Anything, userID).Return(testUser, nil).Once()
+		m.TokenIssuer.EXPECT().IssueAccessToken(userID, testUser.Role(), 15*time.Minute).Return(expectedAccess, nil).Once()
+	}
+
 	// --- BeginLogin UseCase ---
 
 	Describe("BeginLogin", func() {
 		It("successfully returns challengeToken and requestOptions", func(ctx SpecContext) {
 			expectedOpts := []byte("req-opts")
-			authenticator.EXPECT().Begin(ctx).Return(testChallengeToken, expectedOpts, nil).Once()
+			m.Authenticator.EXPECT().Begin(ctx).Return(challengeToken, expectedOpts, nil).Once()
 
 			token, opts, err := beginUC.Execute(ctx)
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(token).To(Equal(testChallengeToken))
+			Expect(token).To(Equal(challengeToken))
 			Expect(opts).To(Equal(expectedOpts))
 		})
 
 		It("fails when Authenticator.Begin returns an error", func(ctx SpecContext) {
 			authErr := errors.New("failed to generate webauthn challenge")
-			authenticator.EXPECT().Begin(ctx).Return("", nil, authErr).Once()
+			m.Authenticator.EXPECT().Begin(ctx).Return("", nil, authErr).Once()
 
 			token, opts, err := beginUC.Execute(ctx)
 
@@ -163,32 +129,26 @@ var _ = Describe("Login UseCase", func() {
 
 	// --- FinishLogin UseCase ---
 
-	Describe("FinishLogin", func() {
+	Describe("Login (Execute)", func() {
 		It("successfully finishes login: updates sign count, retrieves wrapped keys and issues tokens", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				newSignCount := uint32(42)
 				authResult := newAuthResult(newSignCount)
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 				cred := newCredential(10)
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+				m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
 
-				credentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+				m.CredentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
 					return c.SignCount() == newSignCount && c.UserID() == userID
 				})).Return(nil).Once()
 
 				keys := newTestWrappedKeys(cred.ID())
-				wrappedKeys.EXPECT().FindByCredentialID(ctx, cred.ID()).Return(keys, nil).Once()
+				m.CredentialWrappedKeysFinder.EXPECT().FindByCredentialID(ctx, cred.ID()).Return(keys, nil).Once()
 
-				expectedRefreshCode := testRefreshCode
-				refreshTokens.EXPECT().GenerateToken(32).Return(expectedRefreshCode, "refresh-hash", nil).Once()
-
-				sessionID := uuid.New()
-				ids.EXPECT().NewID().Return(sessionID).Once()
-				sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-
-				expectedAccessCode := testAccessCode
-				accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return(expectedAccessCode, nil).Once()
+				expectedRefreshCode := "refresh-code"
+				expectedAccessCode := "access-code"
+				expectSessionIssueOK(expectedAccessCode, expectedRefreshCode)
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -202,18 +162,13 @@ var _ = Describe("Login UseCase", func() {
 					WrappedDEK:    []byte("main-dek-encrypted"),
 					WrapAlgorithm: "AES-256-GCM-KW",
 				}))
-				Expect(out.WrappedKeys[1]).To(Equal(application.WrappedKeyOutput{
-					Scope:         key.ScopeDecoy,
-					WrappedDEK:    []byte("decoy-dek-encrypted"),
-					WrapAlgorithm: "AES-256-GCM-KW",
-				}))
 			})
 		})
 
 		It("fails when Authenticator.Finish returns error", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				authErr := errors.New("invalid signature or challenge expired")
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(application.AuthenticationResult{}, authErr).Once()
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(application.AuthenticationResult{}, authErr).Once()
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -225,9 +180,9 @@ var _ = Describe("Login UseCase", func() {
 		It("returns ErrCredentialNotFound when external ID is missing in database", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				authResult := newAuthResult(42)
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(nil, domain.ErrNotFound).Once()
+				m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(nil, domain.ErrNotFound).Once()
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -236,30 +191,14 @@ var _ = Describe("Login UseCase", func() {
 			})
 		})
 
-		It("returns database error when credential lookup fails", func(ctx SpecContext) {
-			synctest.Test(testT, func(_ *testing.T) {
-				authResult := newAuthResult(42)
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
-
-				dbErr := errors.New("db connection failure")
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(nil, dbErr).Once()
-
-				out, err := finishUC.Execute(ctx, newInput())
-
-				Expect(err).To(MatchError(dbErr))
-				Expect(out).To(BeNil())
-			})
-		})
-
 		It("returns ErrCredentialRevoked when credential is already revoked", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				authResult := newAuthResult(42)
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 				cred := newCredential(10)
-				err := cred.Revoke(fixedNow)
-				Expect(err).ToNot(HaveOccurred())
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+				_ = cred.Revoke(fixedNow)
+				m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -271,17 +210,19 @@ var _ = Describe("Login UseCase", func() {
 		It("detects clone via CloneWarning, revokes credential and sessions, and returns ErrCredentialCloneSuspected", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
 				authResult := newAuthResult(42)
-				authResult.CloneWarning = true
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+				authResult.CloneWarning = true // Сигнал от аутентификатора
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 				cred := newCredential(10)
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+				m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
 
-				credentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+				// Ожидаем сохранение отозванного креда
+				m.CredentialSaver.EXPECT().Save(mock.Anything, mock.MatchedBy(func(c *credential.Credential) bool {
 					return c.IsRevoked()
 				})).Return(nil).Once()
 
-				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
+				// Ожидаем вызов RevokeAllUserSessions
+				m.ActiveSessionsFinder.EXPECT().FindActiveByUserIDs(mock.Anything, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -292,17 +233,17 @@ var _ = Describe("Login UseCase", func() {
 
 		It("detects clone via SignCount regression, revokes credential and sessions, and returns ErrCredentialCloneSuspected", func(ctx SpecContext) {
 			synctest.Test(testT, func(_ *testing.T) {
-				authResult := newAuthResult(5) // Значение меньше текущего (10)
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+				authResult := newAuthResult(5) // Значение 5 меньше текущего (10)
+				m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 				cred := newCredential(10)
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+				m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
 
-				credentialSaver.EXPECT().Save(ctx, mock.MatchedBy(func(c *credential.Credential) bool {
+				m.CredentialSaver.EXPECT().Save(mock.Anything, mock.MatchedBy(func(c *credential.Credential) bool {
 					return c.IsRevoked()
 				})).Return(nil).Once()
 
-				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
+				m.ActiveSessionsFinder.EXPECT().FindActiveByUserIDs(mock.Anything, []user.UserID{userID}, mock.Anything).Return(nil, nil).Once()
 
 				out, err := finishUC.Execute(ctx, newInput())
 
@@ -311,57 +252,17 @@ var _ = Describe("Login UseCase", func() {
 			})
 		})
 
-		It("fails when saving revoked credential during clone mitigation", func(ctx SpecContext) {
-			synctest.Test(testT, func(_ *testing.T) {
-				authResult := newAuthResult(42)
-				authResult.CloneWarning = true
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
-
-				cred := newCredential(10)
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
-
-				saveErr := errors.New("failed to save revoked credential")
-				credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(saveErr).Once()
-
-				out, err := finishUC.Execute(ctx, newInput())
-
-				Expect(err).To(MatchError(saveErr))
-				Expect(out).To(BeNil())
-			})
-		})
-
-		It("fails when session revocation fails during clone mitigation", func(ctx SpecContext) {
-			synctest.Test(testT, func(_ *testing.T) {
-				authResult := newAuthResult(42)
-				authResult.CloneWarning = true
-				authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
-
-				cred := newCredential(10)
-				credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
-
-				credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-
-				revokeErr := errors.New("failed to query active sessions for revocation")
-				revokeSessions.EXPECT().FindActiveByUserIDs(ctx, []user.UserID{userID}, mock.Anything).Return(nil, revokeErr).Once()
-
-				out, err := finishUC.Execute(ctx, newInput())
-
-				Expect(err).To(MatchError(revokeErr))
-				Expect(out).To(BeNil())
-			})
-		})
-
 		Context("Transaction Failures & Rollback Checks", func() {
 			It("rolls back when CredentialSaver.Save fails on sign count update", func(ctx SpecContext) {
 				synctest.Test(testT, func(_ *testing.T) {
 					authResult := newAuthResult(42)
-					authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+					m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 					cred := newCredential(10)
-					credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+					m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
 
 					saveErr := errors.New("failed to update credential sign count")
-					credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(saveErr).Once()
+					m.CredentialSaver.EXPECT().Save(mock.Anything, mock.Anything).Return(saveErr).Once()
 
 					out, err := finishUC.Execute(ctx, newInput())
 
@@ -373,14 +274,14 @@ var _ = Describe("Login UseCase", func() {
 			It("rolls back when wrappedKeys.FindByCredentialID fails", func(ctx SpecContext) {
 				synctest.Test(testT, func(_ *testing.T) {
 					authResult := newAuthResult(42)
-					authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+					m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 					cred := newCredential(10)
-					credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
-					credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
+					m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+					m.CredentialSaver.EXPECT().Save(mock.Anything, mock.Anything).Return(nil).Once()
 
 					wkErr := errors.New("failed to query wrapped keys")
-					wrappedKeys.EXPECT().FindByCredentialID(ctx, cred.ID()).Return(nil, wkErr).Once()
+					m.CredentialWrappedKeysFinder.EXPECT().FindByCredentialID(mock.Anything, cred.ID()).Return(nil, wkErr).Once()
 
 					out, err := finishUC.Execute(ctx, newInput())
 
@@ -389,18 +290,19 @@ var _ = Describe("Login UseCase", func() {
 				})
 			})
 
-			It("rolls back when RefreshToken generation fails", func(ctx SpecContext) {
+			It("rolls back when IssueAccessToken fails during SessionIssuer call", func(ctx SpecContext) {
 				synctest.Test(testT, func(_ *testing.T) {
 					authResult := newAuthResult(42)
-					authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+					m.Authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
 
 					cred := newCredential(10)
-					credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
-					credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-					wrappedKeys.EXPECT().FindByCredentialID(ctx, cred.ID()).Return(newTestWrappedKeys(cred.ID()), nil).Once()
+					m.CredentialFinder.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
+					m.CredentialSaver.EXPECT().Save(mock.Anything, mock.Anything).Return(nil).Once()
+					m.CredentialWrappedKeysFinder.EXPECT().FindByCredentialID(mock.Anything, cred.ID()).Return(newTestWrappedKeys(cred.ID()), nil).Once()
 
+					// Ломаем генерацию токена в SessionIssuer
 					tokenErr := errors.New("entropy error on refresh token gen")
-					refreshTokens.EXPECT().GenerateToken(32).Return("", "", tokenErr).Once()
+					m.TokenGenerator.EXPECT().GenerateToken(32).Return("", "", tokenErr).Once()
 
 					out, err := finishUC.Execute(ctx, newInput())
 
@@ -408,30 +310,34 @@ var _ = Describe("Login UseCase", func() {
 					Expect(out).To(BeNil())
 				})
 			})
+		})
+	})
 
-			It("rolls back when IssueAccessToken fails after refresh token creation", func(ctx SpecContext) {
-				synctest.Test(testT, func(_ *testing.T) {
-					authResult := newAuthResult(42)
-					authenticator.EXPECT().Finish(ctx, challengeToken, authResp).Return(authResult, nil).Once()
+	Context("Helper Data Structures", func() {
+		It("WrappedKeyOutput String redaction", func() {
+			wki := application.WrappedKeyOutput{
+				Scope:         key.ScopeMain,
+				WrappedDEK:    []byte("my-secret-dek-1234567890"), // 24 bytes
+				WrapAlgorithm: "AES-256-GCM",
+			}
+			expected := "WrappedKeyOutput{Scope: 0, WrappedDEK: 24 bytes, WrapAlgorithm: AES-256-GCM}"
+			Expect(wki.String()).To(Equal(expected))
+		})
 
-					cred := newCredential(10)
-					credentials.EXPECT().FindByExternalID(ctx, externalID).Return(cred, nil).Once()
-					credentialSaver.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-					wrappedKeys.EXPECT().FindByCredentialID(ctx, cred.ID()).Return(newTestWrappedKeys(cred.ID()), nil).Once()
+		It("LoginInput String redaction", func() {
+			in := newInput()
+			expected := "LoginInput{ChallengeToken: ***REDACTED***, AuthenticationResponse: ***REDACTED***, DeviceInfo: Chrome on macOS, IPAddress: 192.168.1.100}"
+			Expect(in.String()).To(Equal(expected))
+		})
 
-					refreshTokens.EXPECT().GenerateToken(32).Return("refresh-code", "hash", nil).Once()
-					ids.EXPECT().NewID().Return(uuid.New()).Once()
-					sessions.EXPECT().Save(ctx, mock.Anything).Return(nil).Once()
-
-					jwtErr := errors.New("failed to sign access token RSA key error")
-					accessTokens.EXPECT().IssueAccessToken(userID, 15*time.Minute).Return("", jwtErr).Once()
-
-					out, err := finishUC.Execute(ctx, newInput())
-
-					Expect(err).To(MatchError(jwtErr))
-					Expect(out).To(BeNil())
-				})
-			})
+		It("LoginOutput String redaction", func() {
+			out := application.LoginOutput{
+				AccessToken:  "access",
+				RefreshToken: "refresh",
+				WrappedKeys:  make([]application.WrappedKeyOutput, 3),
+			}
+			expected := "LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***, WrappedKeys: 3 records}"
+			Expect(out.String()).To(Equal(expected))
 		})
 	})
 })

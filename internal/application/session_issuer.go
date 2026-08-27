@@ -17,7 +17,7 @@ type RefreshTokenSaver interface {
 }
 
 type TokenIssuer interface {
-	IssueAccessToken(userID user.UserID, ttl time.Duration) (string, error)
+	IssueAccessToken(userID user.UserID, role user.Role, ttl time.Duration) (string, error)
 }
 
 type SessionIssuer struct {
@@ -26,6 +26,8 @@ type SessionIssuer struct {
 	refreshTokens TokenGenerator
 	accessTokens  TokenIssuer
 	ids           IDGenerator
+	users         UserFinderByID
+	transactor    Transactor
 	refreshTTL    time.Duration
 	accessTTL     time.Duration
 }
@@ -36,6 +38,8 @@ func NewSessionIssuer(
 	refreshTokens TokenGenerator,
 	accessTokens TokenIssuer,
 	ids IDGenerator,
+	users UserFinderByID,
+	transactor Transactor,
 	refreshTTL, accessTTL time.Duration,
 ) *SessionIssuer {
 	return &SessionIssuer{
@@ -44,9 +48,24 @@ func NewSessionIssuer(
 		refreshTokens: refreshTokens,
 		accessTokens:  accessTokens,
 		ids:           ids,
+		users:         users,
+		transactor:    transactor,
 		refreshTTL:    refreshTTL,
 		accessTTL:     accessTTL,
 	}
+}
+
+func (si *SessionIssuer) issueAccess(ctx context.Context, userID user.UserID) (string, error) {
+	u, err := si.users.FindByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	access, err := si.accessTokens.IssueAccessToken(userID, u.Role(), si.accessTTL)
+	if err != nil {
+		return "", err
+	}
+	return access, nil
 }
 
 func (si *SessionIssuer) Issue(ctx context.Context, userID user.UserID, deviceInfo string, ipAddress netip.Addr, now time.Time) (access, refresh string, err error) {
@@ -76,22 +95,31 @@ func (si *SessionIssuer) Issue(ctx context.Context, userID user.UserID, deviceIn
 		return "", "", err
 	}
 
-	if sessionsErr := si.sessions.Save(ctx, rt); sessionsErr != nil {
-		si.log.ErrorContext(ctx, "failed to save refresh token session",
-			slog.String("user_id", userID.String()),
-			slog.String("session_id", rt.ID().String()),
-			slog.Any("error", sessionsErr),
-		)
-		return "", "", sessionsErr
-	}
+	err = si.transactor.RunInTransaction(ctx, func(txCtx context.Context) error {
+		if sessionsErr := si.sessions.Save(txCtx, rt); sessionsErr != nil {
+			si.log.ErrorContext(txCtx, "failed to save refresh token session",
+				slog.String("user_id", userID.String()),
+				slog.String("session_id", rt.ID().String()),
+				slog.Any("error", sessionsErr),
+			)
+			return sessionsErr
+		}
 
-	access, err = si.accessTokens.IssueAccessToken(userID, si.accessTTL)
+		var issueErr error
+		access, issueErr = si.issueAccess(txCtx, userID)
+		if issueErr != nil {
+			si.log.ErrorContext(txCtx, "failed to issue access token",
+				slog.String("user_id", userID.String()),
+				slog.String("session_id", rt.ID().String()),
+				slog.Any("error", issueErr),
+			)
+			return issueErr
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		si.log.ErrorContext(ctx, "failed to issue access token",
-			slog.String("user_id", userID.String()),
-			slog.String("session_id", rt.ID().String()),
-			slog.Any("error", err),
-		)
 		return "", "", err
 	}
 
@@ -139,24 +167,33 @@ func (si *SessionIssuer) Rotate(ctx context.Context, old *session.RefreshToken, 
 		return "", "", credErr
 	}
 
-	access, err = si.accessTokens.IssueAccessToken(old.UserID(), si.accessTTL)
-	if err != nil {
-		si.log.ErrorContext(ctx, "failed to issue new access token during rotation",
-			slog.String("user_id", old.UserID().String()),
-			slog.String("old_session_id", old.ID().String()),
-			slog.Any("error", err),
-		)
-		return "", "", err
-	}
+	err = si.transactor.RunInTransaction(ctx, func(txCtx context.Context) error {
+		var issueErr error
+		access, issueErr = si.issueAccess(txCtx, old.UserID())
+		if issueErr != nil {
+			si.log.ErrorContext(txCtx, "failed to issue new access token during rotation",
+				slog.String("user_id", old.UserID().String()),
+				slog.String("old_session_id", old.ID().String()),
+				slog.Any("error", issueErr),
+			)
+			return issueErr
+		}
 
-	if sessionsErr := si.sessions.Save(ctx, old, newRT); sessionsErr != nil {
-		si.log.ErrorContext(ctx, "failed to save rotated session tokens",
-			slog.String("user_id", old.UserID().String()),
-			slog.String("old_session_id", old.ID().String()),
-			slog.String("new_session_id", newRT.ID().String()),
-			slog.Any("error", sessionsErr),
-		)
-		return "", "", sessionsErr
+		if sessionsErr := si.sessions.Save(txCtx, old, newRT); sessionsErr != nil {
+			si.log.ErrorContext(txCtx, "failed to save rotated session tokens",
+				slog.String("user_id", old.UserID().String()),
+				slog.String("old_session_id", old.ID().String()),
+				slog.String("new_session_id", newRT.ID().String()),
+				slog.Any("error", sessionsErr),
+			)
+			return sessionsErr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return "", "", err
 	}
 
 	si.log.InfoContext(ctx, "session tokens successfully rotated",

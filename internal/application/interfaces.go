@@ -1,6 +1,8 @@
 package application
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 type IDGenerator interface{ NewID() uuid.UUID }
 

@@ -17,16 +17,20 @@ import (
 
 var (
 	ErrInviteNotFound      = errors.New("application: invite not found")
+	ErrCreatorNotFound     = errors.New("application: invite creator not found")
 	ErrWrappedKeysRequired = errors.New("application: at least one wrapped key is required")
 )
 
 type InviteFinderByID interface {
 	FindByID(ctx context.Context, id invite.InviteID) (*invite.Invite, error)
-	Save(ctx context.Context, i *invite.Invite) error
 }
 
 type UserSaver interface {
 	Save(ctx context.Context, u *user.User) error
+}
+
+type UserFinderByID interface {
+	FindByID(ctx context.Context, id user.UserID) (*user.User, error)
 }
 
 type CredentialSaver interface {
@@ -43,8 +47,10 @@ type Transactor interface {
 
 type FinishInviteRegistration struct {
 	log           *slog.Logger
-	invites       InviteFinderByID
-	users         UserSaver
+	inviteFinder  InviteFinderByID
+	inviteSaver   InviteSaver
+	userFinder    UserFinderByID
+	userSaver     UserSaver
 	credentials   CredentialSaver
 	keys          WrappedKeySaver
 	sessionIssuer *SessionIssuer
@@ -56,8 +62,10 @@ type FinishInviteRegistration struct {
 
 func NewFinishInviteRegistration(
 	log *slog.Logger,
-	invites InviteFinderByID,
-	users UserSaver,
+	inviteFinder InviteFinderByID,
+	inviteSaver InviteSaver,
+	userFinder UserFinderByID,
+	userSaver UserSaver,
 	credentials CredentialSaver,
 	keys WrappedKeySaver,
 	sessionIssuer *SessionIssuer,
@@ -68,8 +76,10 @@ func NewFinishInviteRegistration(
 ) *FinishInviteRegistration {
 	return &FinishInviteRegistration{
 		log:           log,
-		invites:       invites,
-		users:         users,
+		inviteFinder:  inviteFinder,
+		inviteSaver:   inviteSaver,
+		userFinder:    userFinder,
+		userSaver:     userSaver,
 		credentials:   credentials,
 		keys:          keys,
 		sessionIssuer: sessionIssuer,
@@ -132,8 +142,6 @@ func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInvite
 		return nil, err
 	}
 
-	now := time.Now()
-
 	result, err := ig.registrator.Finish(ctx, in.ChallengeToken, in.RegistrationResponse)
 	if err != nil {
 		ig.log.ErrorContext(ctx, "failed to finish webauthn registration", slog.Any("error", err))
@@ -143,12 +151,19 @@ func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInvite
 	var out FinishInviteRegistrationOutput
 
 	err = ig.transactor.RunInTransaction(ctx, func(ctx context.Context) error {
+		now := time.Now()
+
 		inv, txErr := ig.redeemInvite(ctx, result.InviteID, result.UserID, now)
 		if txErr != nil {
 			return txErr
 		}
 
-		u, cred, txErr := ig.createUserAndCredential(ctx, result, inv.CreatedBy(), now)
+		creator, txErr := ig.findInviteCreator(ctx, inv.CreatedBy())
+		if txErr != nil {
+			return txErr
+		}
+
+		u, cred, txErr := ig.createUserAndCredential(ctx, result, creator, now)
 		if txErr != nil {
 			return txErr
 		}
@@ -187,8 +202,31 @@ func (ig *FinishInviteRegistration) Execute(ctx context.Context, in FinishInvite
 
 // --- Internal Transaction Helpers ---
 
+func (ig *FinishInviteRegistration) findInviteCreator(
+	ctx context.Context,
+	creatorID user.UserID,
+) (*user.User, error) {
+	creator, err := ig.userFinder.FindByID(ctx, creatorID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			ig.log.ErrorContext(ctx, "invite creator not found",
+				slog.String("creator_id", creatorID.String()),
+			)
+			return nil, ErrCreatorNotFound
+		}
+
+		ig.log.ErrorContext(ctx, "failed to find invite creator",
+			slog.String("creator_id", creatorID.String()),
+			slog.Any("error", err),
+		)
+		return nil, err
+	}
+
+	return creator, nil
+}
+
 func (ig *FinishInviteRegistration) redeemInvite(ctx context.Context, inviteID invite.InviteID, userID user.UserID, now time.Time) (*invite.Invite, error) {
-	inv, err := ig.invites.FindByID(ctx, inviteID)
+	inv, err := ig.inviteFinder.FindByID(ctx, inviteID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			ig.log.WarnContext(ctx, "invite not found during registration finish", slog.String("invite_id", inviteID.String()))
@@ -203,7 +241,7 @@ func (ig *FinishInviteRegistration) redeemInvite(ctx context.Context, inviteID i
 		return nil, err
 	}
 
-	if err = ig.invites.Save(ctx, inv); err != nil {
+	if err = ig.inviteSaver.Save(ctx, inv); err != nil {
 		ig.log.ErrorContext(ctx, "failed to save redeemed invite", slog.String("invite_id", inv.ID().String()), slog.Any("error", err))
 		return nil, err
 	}
@@ -211,14 +249,19 @@ func (ig *FinishInviteRegistration) redeemInvite(ctx context.Context, inviteID i
 	return inv, nil
 }
 
-func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context, res RegistrationResult, createdBy user.UserID, now time.Time) (*user.User, *credential.Credential, error) {
-	u, err := user.New(res.UserID, createdBy, now)
+func (ig *FinishInviteRegistration) createUserAndCredential(ctx context.Context, res RegistrationResult, creator *user.User, now time.Time) (*user.User, *credential.Credential, error) {
+	u, err := user.New(
+		res.UserID,
+		creator.NextInviteeRole(),
+		creator.ID(),
+		now,
+	)
 	if err != nil {
 		ig.log.ErrorContext(ctx, "failed to create user domain entity", slog.String("user_id", res.UserID.String()), slog.Any("error", err))
 		return nil, nil, err
 	}
 
-	if err = ig.users.Save(ctx, u); err != nil {
+	if err = ig.userSaver.Save(ctx, u); err != nil {
 		ig.log.ErrorContext(ctx, "failed to save user", slog.String("user_id", u.ID().String()), slog.Any("error", err))
 		return nil, nil, err
 	}

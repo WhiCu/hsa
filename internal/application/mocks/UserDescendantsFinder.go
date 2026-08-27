@@ -96,8 +96,8 @@ func (_c *UserDescendantsFinder_Descendants_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *UserDescendantsFinder_Descendants_Call) Return(vs []user.UserID, err error) *UserDescendantsFinder_Descendants_Call {
-	_c.Call.Return(vs, err)
+func (_c *UserDescendantsFinder_Descendants_Call) Return(userIDs []user.UserID, err error) *UserDescendantsFinder_Descendants_Call {
+	_c.Call.Return(userIDs, err)
 	return _c
 }
 
