@@ -19,22 +19,19 @@ var _ = Describe("Config", func() {
 		)
 
 		BeforeEach(func() {
-			f, err := os.CreateTemp("", "config-test-*.yaml")
+			f, err := os.CreateTemp(GinkgoT().TempDir(), "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
-			f.Close()
-		})
-
-		AfterEach(func() {
-			os.Remove(tempFile)
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should test env provider transformer logic", func() {
 			err := os.WriteFile(tempFile, []byte("key: value"), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			os.Setenv("APP_FOO_BAR", "test")
-			os.Setenv("APP_ARRAY_VAL", "one two three")
+			GinkgoT().Setenv("APP_FOO_BAR", "test")
+			GinkgoT().Setenv("APP_ARRAY_VAL", "one two three")
 
 			fsys, name, err := config.ResolveDiskFS(tempFile)
 			Expect(err).NotTo(HaveOccurred())
@@ -46,8 +43,6 @@ var _ = Describe("Config", func() {
 			Expect(k.String("foo.bar")).To(Equal("test"))
 			Expect(k.Strings("array.val")).To(Equal([]string{"one", "two", "three"}))
 
-			os.Unsetenv("APP_FOO_BAR")
-			os.Unsetenv("APP_ARRAY_VAL")
 		})
 
 		It("should return error if invalid yaml", func() {
@@ -75,15 +70,10 @@ var _ = Describe("Config", func() {
 		}
 
 		BeforeEach(func() {
-			f, err := os.CreateTemp("", "config-test-*.yaml")
+			f, err := os.CreateTemp(GinkgoT().TempDir(), "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
 			err = f.Close()
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			err := os.Remove(tempFile)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -143,14 +133,11 @@ var _ = Describe("Config", func() {
 		)
 
 		BeforeEach(func() {
-			f, err := os.CreateTemp("", "config-test-*.yaml")
+			f, err := os.CreateTemp(GinkgoT().TempDir(), "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
-			f.Close()
-		})
-
-		AfterEach(func() {
-			os.Remove(tempFile)
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should dump flat config correctly and redact sensitive fields", func() {
@@ -191,11 +178,11 @@ nested:
 
 	Describe("ResolveDiskFS", func() {
 		It("should correctly split absolute path into FS and filename", func() {
-			f, err := os.CreateTemp("", "config-test-*.yaml")
+			f, err := os.CreateTemp(GinkgoT().TempDir(), "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile := f.Name()
-			f.Close()
-			defer os.Remove(tempFile)
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
 
 			fsys, name, err := config.ResolveDiskFS(tempFile)
 			Expect(err).NotTo(HaveOccurred())
@@ -210,17 +197,14 @@ nested:
 		)
 
 		BeforeEach(func() {
-			f, err := os.CreateTemp("", "config-test-*.yaml")
+			f, err := os.CreateTemp(GinkgoT().TempDir(), "config-test-*.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			tempFile = f.Name()
-			f.Close()
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
 
 			err = os.WriteFile(tempFile, []byte("pkg_key: pkg_value"), 0644)
 			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			os.Remove(tempFile)
 		})
 
 		It("should return a valid di package and successfully initialize Koanf", func() {

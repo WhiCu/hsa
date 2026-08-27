@@ -11,3 +11,6 @@
 ## 2025-02-23 - [Optimize string splitting in loops]
 **Learning:** `strings.Split` allocates a new slice containing all split segments. In performance-critical hot paths like HTTP middleware where headers are parsed (e.g., `X-Forwarded-For`), splitting strings and iterating with `slices.Backward` adds unnecessary allocation and GC pressure.
 **Action:** Use manual right-to-left string parsing with `strings.LastIndexByte` instead of `strings.Split` when searching or iterating backwards over a comma-separated list to prevent temporary slice allocations.
+## 2026-08-27 - Optimize domain entities String() formatters
+**Learning:** Replaced `fmt.Sprintf` with direct string concatenation and explicit conversions (`time.Format`, `strconv`) in `.String()` methods of domain models. This avoids heavy reflection on hot paths and achieved up to 4x speedup (2431 ns/op -> 654 ns/op) during logging and debugging.
+**Action:** Default to string concatenation or `strings.Builder` for critical or high-volume `.String()` implementations instead of `fmt.Sprintf`.
