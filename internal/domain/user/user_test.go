@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 	"pgregory.net/rapid"
 
-	"github.com/whicu/hsa/internal/domain"
 	"github.com/whicu/hsa/internal/domain/user"
 )
 
@@ -29,7 +28,7 @@ func genValidUUID() *rapid.Generator[uuid.UUID] {
 var _ = Describe("User", func() {
 	Context("when creating valid users", func() {
 		DescribeTable("Constructor table test",
-			func(id, invitedBy uuid.UUID, isRoot bool) {
+			func(id uuid.UUID, role user.Role, invitedBy uuid.UUID, isRoot bool) {
 				now := time.Now()
 				var u *user.User
 				var err error
@@ -37,7 +36,7 @@ var _ = Describe("User", func() {
 				if isRoot {
 					u, err = user.NewRoot(id, now)
 				} else {
-					u, err = user.New(id, invitedBy, now)
+					u, err = user.New(id, role, invitedBy, now)
 				}
 
 				Expect(err).NotTo(HaveOccurred())
@@ -47,38 +46,64 @@ var _ = Describe("User", func() {
 				Expect(u.CreatedAt()).To(Equal(now))
 
 				if isRoot {
+					Expect(u.Role()).To(Equal(user.Admin))
 					Expect(u.InvitedBy()).To(BeNil())
 				} else {
+					Expect(u.Role()).To(Equal(role))
 					Expect(u.InvitedBy()).NotTo(BeNil())
 					Expect(*u.InvitedBy()).To(Equal(invitedBy))
 				}
 			},
 
-			Entry("Standard invited user", uuid.New(), uuid.New(), false),
-			Entry("Root user", uuid.New(), uuid.Nil, true),
+			Entry("Standard invited user (Member)", uuid.New(), user.Member, uuid.New(), false),
+			Entry("Standard invited user (Admin)", uuid.New(), user.Admin, uuid.New(), false),
+			Entry("Root user", uuid.New(), user.Admin, uuid.Nil, true),
 		)
 	})
 
 	Context("when creating invalid users", func() {
 		DescribeTable("Validation error checking",
-			func(id, invitedBy uuid.UUID, expectedSubErr error) {
-				u, err := user.New(id, invitedBy, time.Now())
+			func(id uuid.UUID, role user.Role, invitedBy uuid.UUID, expectedSubErr error) {
+				u, err := user.New(id, role, invitedBy, time.Now())
 				Expect(u).To(BeNil())
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(domain.ErrValidation))
 				Expect(err).To(MatchError(expectedSubErr))
 			},
 
-			Entry("Nil user ID", uuid.Nil, uuid.New(), user.ErrIDRequired),
-			Entry("Nil invitedBy ID", uuid.New(), uuid.Nil, user.ErrInvitedBy),
-			Entry("Both Nil IDs", uuid.Nil, uuid.Nil, user.ErrIDRequired),
+			Entry("Nil user ID", uuid.Nil, user.Member, uuid.New(), user.ErrIDRequired),
+			Entry("Unknown role", uuid.New(), user.Unknown, uuid.New(), user.ErrRoleRequired),
+			Entry("Nil invitedBy ID", uuid.New(), user.Member, uuid.Nil, user.ErrInvitedBy),
+			Entry("Multiple errors (ID checked first)", uuid.Nil, user.Unknown, uuid.Nil, user.ErrIDRequired),
 		)
 
 		It("should fail NewRoot if ID is Nil", func() {
 			u, err := user.NewRoot(uuid.Nil, time.Now())
 			Expect(u).To(BeNil())
-			Expect(err).To(MatchError(domain.ErrValidation))
 			Expect(err).To(MatchError(user.ErrIDRequired))
+		})
+	})
+
+	Context("Role Property and Behavior", func() {
+		DescribeTable("RoleFromString",
+			func(slug string, expectedRole user.Role, expectedErr error) {
+				role, err := user.RoleFromString(slug)
+				if expectedErr != nil {
+					Expect(err).To(MatchError(expectedErr))
+				} else {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(role).To(Equal(expectedRole))
+				}
+			},
+			Entry("Member", "member", user.Member, nil),
+			Entry("Admin", "admin", user.Admin, nil),
+			Entry("Unknown string", "superadmin", user.Unknown, user.ErrUnknownRole),
+			Entry("Empty string", "", user.Unknown, user.ErrUnknownRole),
+		)
+
+		It("should return correct string representation", func() {
+			Expect(user.Member.String()).To(Equal("member"))
+			Expect(user.Admin.String()).To(Equal("admin"))
+			Expect(user.Unknown.String()).To(Equal(""))
 		})
 	})
 
@@ -89,9 +114,11 @@ var _ = Describe("User", func() {
 				invitedBy := genValidUUID().Draw(t, "invited_by_id")
 				createdAt := time.Unix(rapid.Int64().Draw(t, "timestamp"), 0)
 
-				u, err := user.New(id, invitedBy, createdAt)
+				// Для property-base тестирования используем валидную роль
+				u, err := user.New(id, user.Member, invitedBy, createdAt)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(u.ID()).To(Equal(id))
+				Expect(u.Role()).To(Equal(user.Member))
 				Expect(u.IsRoot()).To(BeFalse())
 				Expect(*u.InvitedBy()).To(Equal(invitedBy))
 				Expect(u.CreatedAt()).To(Equal(createdAt))
@@ -106,11 +133,13 @@ var _ = Describe("User", func() {
 				u, err := user.NewRoot(id, createdAt)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(u.ID()).To(Equal(id))
+				Expect(u.Role()).To(Equal(user.Admin))
 				Expect(u.IsRoot()).To(BeTrue())
 				Expect(u.InvitedBy()).To(BeNil())
 			})
 		})
 	})
+
 	Context("User Helper Functions", func() {
 		It("Create UserID", func() {
 			rapid.Check(GinkgoT(), func(t *rapid.T) {

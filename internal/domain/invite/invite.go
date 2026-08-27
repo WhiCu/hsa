@@ -64,7 +64,7 @@ func (i *Invite) CreatedAt() time.Time         { return i.createdAt }
 func (i *Invite) UsedBy() *user.UserID         { return i.usedBy }
 func (i *Invite) UsedAt() *time.Time           { return i.usedAt }
 func (i *Invite) IsExpired(now time.Time) bool { return now.After(i.expiresAt) }
-func (i *Invite) IsUsed() bool                 { return i.usedAt != nil && i.usedBy != nil }
+func (i *Invite) IsUsed() bool                 { return i.usedAt != nil }
 
 func (i *Invite) Redeem(by user.UserID, now time.Time) error {
 	if i.IsUsed() {
