@@ -5,16 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/samber/do/v2"
 	"github.com/knadh/koanf/v2"
+	"github.com/samber/do/v2"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const dummyEndpoint = "localhost:4317"
+
 func TestInitConn(t *testing.T) {
 	cfg := defaultCfg
-	cfg.Exporter.Conn.Endpoint = "localhost:4317"
+	cfg.Exporter.Conn.Endpoint = dummyEndpoint
 
 	conn, err := InitConn(cfg)
 	require.NoError(t, err)
@@ -120,7 +122,7 @@ func TestNewConfig(t *testing.T) {
 func TestNewConn(t *testing.T) {
 	i := do.New()
 	cfg := defaultCfg
-	cfg.Exporter.Conn.Endpoint = "localhost:4317"
+	cfg.Exporter.Conn.Endpoint = dummyEndpoint
 	do.ProvideValue(i, cfg)
 
 	conn, err := newConn(i)
@@ -153,7 +155,7 @@ func TestNewTelemetry(t *testing.T) {
 func TestNewTelemetryWithMocks(t *testing.T) {
 	i := do.New()
 	cfg := defaultCfg
-	cfg.Exporter.Conn.Endpoint = "localhost:4317"
+	cfg.Exporter.Conn.Endpoint = dummyEndpoint
 	do.ProvideValue(i, cfg)
 	do.ProvideValue(i, context.Background())
 
@@ -174,7 +176,7 @@ func TestShutdown_Full(t *testing.T) {
 	defer cancel()
 
 	cfg := defaultCfg
-	cfg.Exporter.Conn.Endpoint = "localhost:4317"
+	cfg.Exporter.Conn.Endpoint = dummyEndpoint
 	res, _ := InitResource(ctx, cfg)
 
 	conn, _ := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
