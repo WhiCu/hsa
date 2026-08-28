@@ -14,3 +14,6 @@
 ## 2026-08-27 - Optimize domain entities String() formatters
 **Learning:** Replaced `fmt.Sprintf` with direct string concatenation and explicit conversions (`time.Format`, `strconv`) in `.String()` methods of domain models. This avoids heavy reflection on hot paths and achieved up to 4x speedup (2431 ns/op -> 654 ns/op) during logging and debugging.
 **Action:** Default to string concatenation or `strings.Builder` for critical or high-volume `.String()` implementations instead of `fmt.Sprintf`.
+## 2026-08-28 - Optimize DTO struct String() formatters
+**Learning:** Replaced `fmt.Sprintf` with string concatenation (`+`) and explicit `strconv` formatting in `.String()` methods of Application-layer DTOs (e.g., `LoginInput`, `RegistrationResult`). This avoids heavy runtime reflection in frequently invoked paths, such as logging middleware, significantly improving performance and reducing allocations. Slices of structs were formatted efficiently by pre-allocating or writing to a `strings.Builder`.
+**Action:** Default to explicit string concatenation and `strconv`/`strings.Builder` for frequently invoked `.String()` formatters instead of relying on `fmt.Sprintf`.
