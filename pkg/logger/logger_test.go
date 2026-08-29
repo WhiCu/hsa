@@ -2,7 +2,6 @@ package logger_test
 
 import (
 	"log/slog"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -60,7 +59,7 @@ var _ = Describe("Logger Package", func() {
 				Level:  "info",
 				Caller: 1,
 				File: logger.FileConfig{
-					Name:        filepath.Join(os.TempDir(), "test.log"),
+					Name:        filepath.Join(GinkgoT().TempDir(), "test.log"),
 					Size:        10,
 					Backups:     3,
 					ChannelSize: 100,
@@ -73,8 +72,9 @@ var _ = Describe("Logger Package", func() {
 			Expect(log).NotTo(BeNil())
 			Expect(closer).NotTo(BeNil())
 
+			DeferCleanup(closer.Close)
+
 			log.Info("test log")
-			Expect(closer.Close()).To(Succeed())
 		})
 
 		It("rejects invalid log levels", func() {
@@ -98,7 +98,7 @@ var _ = Describe("Logger Package", func() {
 			do.OverrideValue(injector, logger.Config{
 				Level: "debug",
 				File: logger.FileConfig{
-					Name:        filepath.Join(os.TempDir(), "di.log"),
+					Name:        filepath.Join(GinkgoT().TempDir(), "di.log"),
 					Size:        100,
 					Backups:     1,
 					ChannelSize: 100,
