@@ -149,6 +149,8 @@ api_key: some_api_key
 auth_token: bearer_token_abc
 nested:
   pass: nested_password
+hmac_secret: super_secret_hmac
+my_nonce: my_secret_nonce
 `
 			err := os.WriteFile(tempFile, []byte(yamlContent), 0644)
 			Expect(err).NotTo(HaveOccurred())

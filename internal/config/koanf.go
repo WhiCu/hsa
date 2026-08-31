@@ -88,7 +88,15 @@ func DumpFlat(k *koanf.Koanf) string {
 	for _, key := range k.Keys() {
 		value := k.Get(key)
 		lowerKey := strings.ToLower(key)
-		if strings.Contains(lowerKey, "secret") || strings.Contains(lowerKey, "key") || strings.Contains(lowerKey, "pass") || strings.Contains(lowerKey, "token") {
+		if strings.Contains(lowerKey, "secret") ||
+			strings.Contains(lowerKey, "key") ||
+			strings.Contains(lowerKey, "pass") ||
+			strings.Contains(lowerKey, "token") ||
+			strings.Contains(lowerKey, "hmac") ||
+			strings.Contains(lowerKey, "prf") ||
+			strings.Contains(lowerKey, "seed") ||
+			strings.Contains(lowerKey, "nonce") ||
+			strings.Contains(lowerKey, "metadata") {
 			fmt.Fprintf(&sb, "%s = ***REDACTED***\n", key)
 		} else {
 			fmt.Fprintf(&sb, "%s = %v\n", key, value)
