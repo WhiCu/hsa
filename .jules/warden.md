@@ -25,3 +25,8 @@
 **Pattern/Issue:** Using `GinkgoT().Setenv()` or `GinkgoT().TempDir()` directly inside container nodes (e.g., `Describe`, `Context`) or at the top level of the test file causes a runtime panic.
 **Learning:** Ginkgo's `GinkgoT()` helper wraps standard library `testing.TB` functionalities. Methods that register cleanups (`Setenv`, `TempDir`, `Cleanup`) rely on Ginkgo's internal `DeferCleanup` mechanism, which is strictly scoped. Calling these outside of setup nodes (`BeforeEach`, `BeforeAll`) or subject nodes (`It`) violates Ginkgo's execution model because container nodes execute during the initial tree-building phase, not during the actual test execution.
 **Prevention:** Always ensure calls to `GinkgoT().Setenv()`, `GinkgoT().TempDir()`, and `GinkgoT().Cleanup()` are placed inside `BeforeEach` (or `It`) blocks, rather than directly in `Describe` or `Context` closures.
+
+## 2025-03-01 - Outdated Test Setup Patterns
+**Pattern/Issue:** Some test suites, specifically `pkg/logger/logger_test.go`, use `filepath.Join(os.TempDir(), ...)` to create temporary files without utilizing the modern `t.TempDir()` (or Ginkgo equivalent `GinkgoT().TempDir()`), which automatically handles creation and cleanup and isolates temporary files by test.
+**Learning:** This is an outdated pattern that might lead to cross-test pollution or file descriptor leaks.
+**Prevention:** Apply `GinkgoT().TempDir()` for Ginkgo tests to ensure proper and automatic cleanup.
