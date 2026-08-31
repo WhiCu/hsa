@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/netip"
+	"strconv"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain"
@@ -71,7 +71,7 @@ type LoginInput struct {
 
 // SECURITY: never log this field
 func (in LoginInput) String() string {
-	return fmt.Sprintf("LoginInput{ChallengeToken: ***REDACTED***, AuthenticationResponse: ***REDACTED***, DeviceInfo: %v, IPAddress: %v}", in.DeviceInfo, in.IPAddress)
+	return "LoginInput{ChallengeToken: ***REDACTED***, AuthenticationResponse: ***REDACTED***, DeviceInfo: " + in.DeviceInfo + ", IPAddress: " + in.IPAddress.String() + "}"
 }
 
 type WrappedKeyOutput struct {
@@ -81,7 +81,7 @@ type WrappedKeyOutput struct {
 }
 
 func (w WrappedKeyOutput) String() string {
-	return fmt.Sprintf("WrappedKeyOutput{Scope: %d, WrappedDEK: %d bytes, WrapAlgorithm: %s}", w.Scope, len(w.WrappedDEK), w.WrapAlgorithm)
+	return "WrappedKeyOutput{Scope: " + strconv.FormatUint(uint64(w.Scope), 10) + ", WrappedDEK: " + strconv.Itoa(len(w.WrappedDEK)) + " bytes, WrapAlgorithm: " + w.WrapAlgorithm + "}"
 }
 
 func wrappedKeysToOutput(keys []*key.WrappedKey) []WrappedKeyOutput {
@@ -104,7 +104,7 @@ type LoginOutput struct {
 
 // SECURITY: never log this field
 func (out LoginOutput) String() string {
-	return fmt.Sprintf("LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***, WrappedKeys: %d records}", len(out.WrappedKeys))
+	return "LoginOutput{AccessToken: ***REDACTED***, RefreshToken: ***REDACTED***, WrappedKeys: " + strconv.Itoa(len(out.WrappedKeys)) + " records}"
 }
 
 func (uc *Login) Execute(ctx context.Context, in LoginInput) (*LoginOutput, error) {

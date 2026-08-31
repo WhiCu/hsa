@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/whicu/hsa/internal/domain/credential"
 	"github.com/whicu/hsa/internal/domain/invite"
@@ -20,7 +22,12 @@ type RegistrationResult struct {
 
 // SECURITY: never log this field
 func (r RegistrationResult) String() string {
-	return fmt.Sprintf("RegistrationResult{UserID: %v, InviteID: %v, CredentialID: %v, PublicKey: ***REDACTED***, Transports: %v, InitialSignCount: %d}", r.UserID, r.InviteID, r.ExternalID, r.Transports, r.InitialSignCount)
+	return "RegistrationResult{UserID: " + r.UserID.String() +
+		", InviteID: " + r.InviteID.String() +
+		", CredentialID: " + fmt.Sprintf("%v", r.ExternalID) +
+		", PublicKey: ***REDACTED***" +
+		", Transports: [" + strings.Join(r.Transports, " ") + "]" +
+		", InitialSignCount: " + strconv.FormatUint(uint64(r.InitialSignCount), 10) + "}"
 }
 
 type Registrator interface {
@@ -37,7 +44,9 @@ type AuthenticationResult struct {
 
 // SECURITY: never log this field
 func (a AuthenticationResult) String() string {
-	return fmt.Sprintf("AuthenticationResult{UserID: %v, ExternalID: ***REDACTED***, NewSignCount: %d}", a.UserID, a.NewSignCount)
+	return "AuthenticationResult{UserID: " + a.UserID.String() +
+		", ExternalID: ***REDACTED***" +
+		", NewSignCount: " + strconv.FormatUint(uint64(a.NewSignCount), 10) + "}"
 }
 
 type Authenticator interface {
