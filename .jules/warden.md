@@ -25,7 +25,11 @@
 **Pattern/Issue:** Using `GinkgoT().Setenv()` or `GinkgoT().TempDir()` directly inside container nodes (e.g., `Describe`, `Context`) or at the top level of the test file causes a runtime panic.
 **Learning:** Ginkgo's `GinkgoT()` helper wraps standard library `testing.TB` functionalities. Methods that register cleanups (`Setenv`, `TempDir`, `Cleanup`) rely on Ginkgo's internal `DeferCleanup` mechanism, which is strictly scoped. Calling these outside of setup nodes (`BeforeEach`, `BeforeAll`) or subject nodes (`It`) violates Ginkgo's execution model because container nodes execute during the initial tree-building phase, not during the actual test execution.
 **Prevention:** Always ensure calls to `GinkgoT().Setenv()`, `GinkgoT().TempDir()`, and `GinkgoT().Cleanup()` are placed inside `BeforeEach` (or `It`) blocks, rather than directly in `Describe` or `Context` closures.
-## 2025-02-21 - [Modernization] Proper usage of Ginkgo DeferCleanup
-**Pattern/Issue:** Using `DeferCleanup` at the very end of an `It` block in Ginkgo tests to clean up resources (like file descriptors from `GinkgoT().TempDir()`).
-**Learning:** If an assertion (like `Expect(err).NotTo(HaveOccurred())`) fails earlier in the test, test execution halts, and the `DeferCleanup` registered at the end of the block is never reached. This defeats its purpose of guaranteeing teardown on failure.
-**Prevention:** Register `DeferCleanup(func)` immediately after the object is created and nil-checked (e.g., right after `Expect(closer).NotTo(BeNil())`), so it acts like a standard `defer` that executes even on failure.
+## 2024-05-24 - Ginkgo DeferCleanup and os.TempDir
+**Pattern/Issue:** Found `os.TempDir()` usage in `logger_test.go` dropping files into the shared `/tmp` dir and relying on a manual `closer.Close()` assertion at the end of the test block.
+**Learning:** This caused test pollution when run repeatedly because files weren't explicitly cleaned up, and moving to `GinkgoT().TempDir()` revealed a flaw: the temp dir cleanup happens *before* the garbage collector closes the file, leading to "directory not empty" failures.
+**Prevention:** Always pair `GinkgoT().TempDir()` with `DeferCleanup(closer.Close)` when writing to files inside it, to ensure file descriptors are released *before* Ginkgo attempts to tear down the temp directory.
+## 2024-05-24 - Ginkgo DeferCleanup and os.TempDir with Background Workers
+**Pattern/Issue:** Even when pairing `GinkgoT().TempDir()` with `DeferCleanup(closer.Close)`, tests failed sporadically with "directory not empty".
+**Learning:** This occurs when the object being closed (e.g. `phuslu/log`'s AsyncWriter) processes the close in a background goroutine and takes a few milliseconds to fully release the file descriptor. Ginkgo's `TempDir()` attempts deletion instantly after test cleanup, failing if the OS hasn't fully relinquished the file lock.
+**Prevention:** For files written by asynchronous background workers, standard `os.TempDir()` (or `/tmp`) with a randomized filename and manual explicit cleanup (`os.Remove`) inside `DeferCleanup` is much safer and more deterministic than relying on auto-cleaning test directories.
