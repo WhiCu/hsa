@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -55,11 +56,15 @@ var _ = Describe("Logger Package", func() {
 
 	Context("Configuration and Lifecycle", func() {
 		It("initializes and shuts down successfully", func() {
+			// Do not use GinkgoT().TempDir() directly as the file may be held open asynchronously by the
+			// AsyncWriter worker goroutine after close, causing an "directory not empty" error from unlinkat
+			// when Ginkgo tries to rapidly clean it up.
+			// Use standard os.TempDir but randomize the filename for test safety.
 			cfg := logger.Config{
 				Level:  "info",
 				Caller: 1,
 				File: logger.FileConfig{
-					Name:        filepath.Join(GinkgoT().TempDir(), "test.log"),
+					Name:        filepath.Join(os.TempDir(), "test-init-shutdown.log"),
 					Size:        10,
 					Backups:     3,
 					ChannelSize: 100,
@@ -71,9 +76,11 @@ var _ = Describe("Logger Package", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(log).NotTo(BeNil())
 			Expect(closer).NotTo(BeNil())
-			DeferCleanup(closer.Close)
 
-			DeferCleanup(closer.Close)
+			DeferCleanup(func() {
+				_ = closer.Close()
+				_ = os.Remove(cfg.File.Name)
+			})
 
 			log.Info("test log")
 		})
@@ -99,7 +106,7 @@ var _ = Describe("Logger Package", func() {
 			do.OverrideValue(injector, logger.Config{
 				Level: "debug",
 				File: logger.FileConfig{
-					Name:        filepath.Join(GinkgoT().TempDir(), "di.log"),
+					Name:        filepath.Join(os.TempDir(), "di.log"),
 					Size:        100,
 					Backups:     1,
 					ChannelSize: 100,
@@ -113,7 +120,11 @@ var _ = Describe("Logger Package", func() {
 			svc, err := do.Invoke[*logger.Service](injector)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc).NotTo(BeNil())
-			DeferCleanup(svc.Shutdown)
+
+			DeferCleanup(func() {
+				_ = svc.Shutdown()
+				_ = os.Remove(filepath.Join(os.TempDir(), "di.log"))
+			})
 		})
 	})
 })

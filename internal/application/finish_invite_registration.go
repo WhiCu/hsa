@@ -3,10 +3,9 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/whicu/hsa/internal/domain"
@@ -99,7 +98,7 @@ type WrappedKeyInput struct {
 
 // SECURITY: never log this field
 func (w WrappedKeyInput) String() string {
-	return "WrappedKeyInput{Scope: " + strconv.FormatUint(uint64(w.Scope), 10) + ", WrappedDEK: ***REDACTED***, WrapAlgorithm: " + w.WrapAlgorithm + "}"
+	return fmt.Sprintf("WrappedKeyInput{Scope: %d, WrappedDEK: ***REDACTED***, WrapAlgorithm: %s}", w.Scope, w.WrapAlgorithm)
 }
 
 type FinishInviteRegistrationInput struct {
@@ -112,16 +111,7 @@ type FinishInviteRegistrationInput struct {
 
 // SECURITY: never log this field
 func (in FinishInviteRegistrationInput) String() string {
-	var keysSb strings.Builder
-	keysSb.WriteString("[")
-	for i, k := range in.WrappedKeys {
-		if i > 0 {
-			keysSb.WriteString(" ")
-		}
-		keysSb.WriteString(k.String())
-	}
-	keysSb.WriteString("]")
-	return "FinishInviteRegistrationInput{ChallengeToken: ***REDACTED***, RegistrationResponse: ***REDACTED***, WrappedKeys: " + keysSb.String() + ", DeviceInfo: " + in.DeviceInfo + ", IPAddress: " + in.IPAddress.String() + "}"
+	return fmt.Sprintf("FinishInviteRegistrationInput{ChallengeToken: ***REDACTED***, RegistrationResponse: ***REDACTED***, WrappedKeys: %v, DeviceInfo: %v, IPAddress: %v}", in.WrappedKeys, in.DeviceInfo, in.IPAddress)
 }
 
 type FinishInviteRegistrationOutput struct {
