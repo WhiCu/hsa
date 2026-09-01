@@ -71,6 +71,7 @@ var _ = Describe("Logger Package", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(log).NotTo(BeNil())
 			Expect(closer).NotTo(BeNil())
+			DeferCleanup(closer.Close)
 
 			DeferCleanup(closer.Close)
 
@@ -112,9 +113,7 @@ var _ = Describe("Logger Package", func() {
 			svc, err := do.Invoke[*logger.Service](injector)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc).NotTo(BeNil())
-
-			// Cleanup
-			Expect(svc.Shutdown()).To(Succeed())
+			DeferCleanup(svc.Shutdown)
 		})
 	})
 })

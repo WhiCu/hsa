@@ -149,6 +149,11 @@ api_key: some_api_key
 auth_token: bearer_token_abc
 nested:
   pass: nested_password
+hmac_val: my_hmac
+prf_info: my_prf
+seed_data: my_seed
+a_nonce: the_nonce_value
+metadata_blob: a_metadata
 `
 			err := os.WriteFile(tempFile, []byte(yamlContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
@@ -167,12 +172,22 @@ nested:
 			Expect(dump).To(ContainSubstring("api_key = ***REDACTED***"))
 			Expect(dump).To(ContainSubstring("auth_token = ***REDACTED***"))
 			Expect(dump).To(ContainSubstring("nested.pass = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("hmac_val = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("prf_info = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("seed_data = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("a_nonce = ***REDACTED***"))
+			Expect(dump).To(ContainSubstring("metadata_blob = ***REDACTED***"))
 
 			Expect(dump).NotTo(ContainSubstring("hidden_value"))
 			Expect(dump).NotTo(ContainSubstring("password123"))
 			Expect(dump).NotTo(ContainSubstring("some_api_key"))
 			Expect(dump).NotTo(ContainSubstring("bearer_token_abc"))
 			Expect(dump).NotTo(ContainSubstring("nested_password"))
+			Expect(dump).NotTo(ContainSubstring("my_hmac"))
+			Expect(dump).NotTo(ContainSubstring("my_prf"))
+			Expect(dump).NotTo(ContainSubstring("my_seed"))
+			Expect(dump).NotTo(ContainSubstring("the_nonce_value"))
+			Expect(dump).NotTo(ContainSubstring("a_metadata"))
 		})
 	})
 
