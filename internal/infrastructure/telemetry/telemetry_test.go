@@ -35,7 +35,7 @@ func TestInitConn(t *testing.T) {
 }
 
 func TestInitResource(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := defaultCfg
 	res, err := InitResource(ctx, cfg)
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestInitResource(t *testing.T) {
 }
 
 func TestInitTracerProvider(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := defaultCfg
 	res, _ := InitResource(ctx, cfg)
 
@@ -71,7 +71,7 @@ func TestInitTracerProvider(t *testing.T) {
 }
 
 func TestInitLoggerProvider(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := defaultCfg
 	res, _ := InitResource(ctx, cfg)
 
@@ -85,7 +85,7 @@ func TestInitLoggerProvider(t *testing.T) {
 }
 
 func TestInitMeterProvider(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := defaultCfg
 	res, _ := InitResource(ctx, cfg)
 
@@ -104,7 +104,7 @@ func TestInitRuntimeMetrics(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var nilSvc *Service
 	err := nilSvc.Shutdown(ctx)
@@ -134,7 +134,7 @@ func TestNewConn(t *testing.T) {
 func TestNewResource(t *testing.T) {
 	i := do.New()
 	do.ProvideValue(i, defaultCfg)
-	do.ProvideValue(i, context.Background())
+	do.ProvideValue(i, t.Context())
 
 	res, err := newResource(i)
 	require.NoError(t, err)
@@ -157,9 +157,9 @@ func TestNewTelemetryWithMocks(t *testing.T) {
 	cfg := defaultCfg
 	cfg.Exporter.Conn.Endpoint = dummyEndpoint
 	do.ProvideValue(i, cfg)
-	do.ProvideValue(i, context.Background())
+	do.ProvideValue(i, t.Context())
 
-	res, _ := InitResource(context.Background(), cfg)
+	res, _ := InitResource(t.Context(), cfg)
 	do.ProvideValue(i, res)
 
 	conn, _ := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -172,7 +172,7 @@ func TestNewTelemetryWithMocks(t *testing.T) {
 }
 
 func TestShutdown_Full(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*50)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
 	defer cancel()
 
 	cfg := defaultCfg
