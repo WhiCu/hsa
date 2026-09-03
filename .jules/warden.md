@@ -29,3 +29,7 @@
 **Pattern/Issue:** Using `DeferCleanup` at the very end of an `It` block in Ginkgo tests to clean up resources (like file descriptors from `GinkgoT().TempDir()`).
 **Learning:** If an assertion (like `Expect(err).NotTo(HaveOccurred())`) fails earlier in the test, test execution halts, and the `DeferCleanup` registered at the end of the block is never reached. This defeats its purpose of guaranteeing teardown on failure.
 **Prevention:** Register `DeferCleanup(func)` immediately after the object is created and nil-checked (e.g., right after `Expect(closer).NotTo(BeNil())`), so it acts like a standard `defer` that executes even on failure.
+## 2025-02-21 - [Modernization] Proper cleanup using t.Cleanup
+**Pattern/Issue:** Using `defer conn.Close()` and `defer cancel()` in testing functions within `internal/infrastructure/telemetry/telemetry_test.go`.
+**Learning:** In standard Go tests (`testing` package), `defer` evaluates when the function returns. When subtests run in parallel, the parent function might return before subtests finish, causing premature resource cleanup or context cancellation. `t.Cleanup()` resolves this by tying cleanup to the end of the test's execution lifecycle.
+**Prevention:** Always use `t.Cleanup()` instead of `defer` for teardown operations in `testing.T` and `testing.B` contexts, unless the resource is strictly scoped within a short-lived loop or function closure within the test.
