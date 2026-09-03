@@ -19,3 +19,7 @@
 **Leak Pattern:** The configuration flattening and dumping utility `config.DumpFlat()` redacted some sensitive keywords (`secret`, `key`, `pass`, `token`), but missed critical cryptographic terms like `hmac`, `prf`, `seed`, `nonce`, and `metadata`. This oversight could lead to plaintext exposure of cryptographic parameters if the configuration is dumped to logs or standard output.
 **Learning:** Hardcoded exclusion lists for sensitive keywords need continuous review and expansion. They are prone to missing domain-specific cryptographic terminology.
 **Prevention:** Include a comprehensive set of cryptographic keywords (`hmac`, `prf`, `seed`, `nonce`, `metadata`) in redaction utilities by default to provide robust defense-in-depth against configuration leaks.
+## 2025-02-23 - [Application DTO Leakage via Format Strings]
+**Leak Pattern:** The `RegistrationResult` DTO implemented a custom `String()` method but used `fmt.Sprintf("%v", r.ExternalID)` to append the WebAuthn Credential ID instead of explicitly redacting it like other sensitive fields (e.g., `PublicKey`).
+**Learning:** Using `fmt.Sprintf` directly against sensitive slices (like `[]byte`) inside custom Stringers bypasses the entire purpose of manual stringer redaction, leaking the exact data the custom stringer was meant to hide.
+**Prevention:** Always use explicit string concatenation with literal `"***REDACTED***"` blocks for sensitive fields in application DTO `String()` methods. Never pass sensitive fields into formatters like `%v` or `%s`.
