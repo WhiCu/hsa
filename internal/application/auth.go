@@ -11,8 +11,8 @@ import (
 )
 
 type RegistrationResult struct {
-	UserID           user.UserID
-	InviteID         invite.InviteID
+	UserID   user.UserID
+	InviteID invite.InviteID
 	// SECURITY: never log this field
 	ExternalID       credential.ExternalID
 	PublicKey        []byte
