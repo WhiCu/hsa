@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -14,6 +13,7 @@ import (
 type RegistrationResult struct {
 	UserID           user.UserID
 	InviteID         invite.InviteID
+	// SECURITY: never log this field
 	ExternalID       credential.ExternalID
 	PublicKey        []byte
 	Transports       []string
@@ -24,7 +24,7 @@ type RegistrationResult struct {
 func (r RegistrationResult) String() string {
 	return "RegistrationResult{UserID: " + r.UserID.String() +
 		", InviteID: " + r.InviteID.String() +
-		", CredentialID: " + fmt.Sprintf("%v", r.ExternalID) +
+		", ExternalID: ***REDACTED***" +
 		", PublicKey: ***REDACTED***" +
 		", Transports: [" + strings.Join(r.Transports, " ") + "]" +
 		", InitialSignCount: " + strconv.FormatUint(uint64(r.InitialSignCount), 10) + "}"
