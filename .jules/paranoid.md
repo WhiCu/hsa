@@ -19,3 +19,7 @@
 **Leak Pattern:** The configuration flattening and dumping utility `config.DumpFlat()` redacted some sensitive keywords (`secret`, `key`, `pass`, `token`), but missed critical cryptographic terms like `hmac`, `prf`, `seed`, `nonce`, and `metadata`. This oversight could lead to plaintext exposure of cryptographic parameters if the configuration is dumped to logs or standard output.
 **Learning:** Hardcoded exclusion lists for sensitive keywords need continuous review and expansion. They are prone to missing domain-specific cryptographic terminology.
 **Prevention:** Include a comprehensive set of cryptographic keywords (`hmac`, `prf`, `seed`, `nonce`, `metadata`) in redaction utilities by default to provide robust defense-in-depth against configuration leaks.
+## 2025-02-12 - [Metadata Leak in WrappedKeyOutput logging]
+**Leak Pattern:** Metadata (such as the length of a secret key, e.g., `WrappedDEK`) was logged via `WrappedKeyOutput.String()` instead of being completely redacted.
+**Learning:** Logging structural metadata about a secret (like its length) can still leak information to attackers or observability systems and must be treated as a secret leak.
+**Prevention:** Avoid logging any metadata about secrets (including their length, hash parts, etc.) and instead replace the entire field with `***REDACTED***` in `.String()` implementations.

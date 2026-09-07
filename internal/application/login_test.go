@@ -320,7 +320,7 @@ var _ = Describe("Login UseCase", func() {
 				WrappedDEK:    []byte("my-secret-dek-1234567890"), // 24 bytes
 				WrapAlgorithm: "AES-256-GCM",
 			}
-			expected := "WrappedKeyOutput{Scope: 0, WrappedDEK: 24 bytes, WrapAlgorithm: AES-256-GCM}"
+			expected := "WrappedKeyOutput{Scope: 0, WrappedDEK: ***REDACTED***, WrapAlgorithm: AES-256-GCM}"
 			Expect(wki.String()).To(Equal(expected))
 		})
 
