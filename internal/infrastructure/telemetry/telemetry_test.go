@@ -49,7 +49,7 @@ func TestInitTracerProvider(t *testing.T) {
 
 	conn, err := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer conn.Close()
+	t.Cleanup(func() { _ = conn.Close() })
 
 	tp, err := InitTracerProvider(ctx, cfg, res, conn)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestInitLoggerProvider(t *testing.T) {
 
 	conn, err := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer conn.Close()
+	t.Cleanup(func() { _ = conn.Close() })
 
 	lp, err := InitLoggerProvider(ctx, cfg, res, conn)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestInitMeterProvider(t *testing.T) {
 
 	conn, err := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer conn.Close()
+	t.Cleanup(func() { _ = conn.Close() })
 
 	mp, err := InitMeterProvider(ctx, cfg, res, conn)
 	require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestNewTelemetryWithMocks(t *testing.T) {
 	do.ProvideValue(i, res)
 
 	conn, _ := grpc.NewClient(cfg.Exporter.Conn.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	defer conn.Close()
+	t.Cleanup(func() { _ = conn.Close() })
 	do.ProvideValue(i, conn)
 
 	svc, err := newTelemetry(i)
@@ -173,7 +173,7 @@ func TestNewTelemetryWithMocks(t *testing.T) {
 
 func TestShutdown_Full(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	cfg := defaultCfg
 	cfg.Exporter.Conn.Endpoint = dummyEndpoint
