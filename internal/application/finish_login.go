@@ -80,8 +80,9 @@ type WrappedKeyOutput struct {
 	WrapAlgorithm string
 }
 
+// SECURITY: never log this field
 func (w WrappedKeyOutput) String() string {
-	return "WrappedKeyOutput{Scope: " + strconv.FormatUint(uint64(w.Scope), 10) + ", WrappedDEK: " + strconv.Itoa(len(w.WrappedDEK)) + " bytes, WrapAlgorithm: " + w.WrapAlgorithm + "}"
+	return "WrappedKeyOutput{Scope: " + strconv.FormatUint(uint64(w.Scope), 10) + ", WrappedDEK: ***REDACTED***, WrapAlgorithm: " + w.WrapAlgorithm + "}"
 }
 
 func wrappedKeysToOutput(keys []*key.WrappedKey) []WrappedKeyOutput {
