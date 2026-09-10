@@ -55,11 +55,12 @@ var _ = Describe("Logger Package", func() {
 
 	Context("Configuration and Lifecycle", func() {
 		It("initializes and shuts down successfully", func() {
+			tempDir := GinkgoT().TempDir()
 			cfg := logger.Config{
 				Level:  "info",
 				Caller: 1,
 				File: logger.FileConfig{
-					Name:        filepath.Join(GinkgoT().TempDir(), "test.log"),
+					Name:        filepath.Join(tempDir, "test.log"),
 					Size:        10,
 					Backups:     3,
 					ChannelSize: 100,
@@ -71,7 +72,7 @@ var _ = Describe("Logger Package", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(log).NotTo(BeNil())
 			Expect(closer).NotTo(BeNil())
-			DeferCleanup(closer.Close)
+			DeferCleanup(func() { _ = closer.Close() })
 
 			log.Info("test log")
 		})
@@ -87,6 +88,7 @@ var _ = Describe("Logger Package", func() {
 
 	Context("Dependency Injection", func() {
 		It("resolves components via injector", func() {
+			tempDir := GinkgoT().TempDir()
 			// This exercises newConfig, newService, newSlogLogger
 			// Requires setting up koanf correctly, we might skip full DI test
 			// if it requires too much env setup, but we can verify it fails gracefully
@@ -97,7 +99,7 @@ var _ = Describe("Logger Package", func() {
 			do.OverrideValue(injector, logger.Config{
 				Level: "debug",
 				File: logger.FileConfig{
-					Name:        filepath.Join(GinkgoT().TempDir(), "di.log"),
+					Name:        filepath.Join(tempDir, "di.log"),
 					Size:        100,
 					Backups:     1,
 					ChannelSize: 100,
