@@ -47,11 +47,15 @@ func TestFinishInviteRegistrationOutput_String(t *testing.T) {
 
 func TestRegistrationResult_String(t *testing.T) {
 	res := application.RegistrationResult{
-		PublicKey: []byte("secret_public_key"),
+		PublicKey:  []byte("secret_public_key"),
+		ExternalID: []byte("secret_external_id"),
 	}
 	str := res.String()
 	if strings.Contains(str, "secret_public_key") {
 		t.Errorf("PublicKey was not redacted")
+	}
+	if strings.Contains(str, "secret_external_id") {
+		t.Errorf("ExternalID was not redacted")
 	}
 }
 
