@@ -19,3 +19,8 @@
 **Leak Pattern:** The configuration flattening and dumping utility `config.DumpFlat()` redacted some sensitive keywords (`secret`, `key`, `pass`, `token`), but missed critical cryptographic terms like `hmac`, `prf`, `seed`, `nonce`, and `metadata`. This oversight could lead to plaintext exposure of cryptographic parameters if the configuration is dumped to logs or standard output.
 **Learning:** Hardcoded exclusion lists for sensitive keywords need continuous review and expansion. They are prone to missing domain-specific cryptographic terminology.
 **Prevention:** Include a comprehensive set of cryptographic keywords (`hmac`, `prf`, `seed`, `nonce`, `metadata`) in redaction utilities by default to provide robust defense-in-depth against configuration leaks.
+
+## 2024-05-27 - DTO String() Default Formatter Leak
+**Leak Pattern:** Raw `CredentialID` (which is aliased from `ExternalID`, essentially a byte array containing cryptographic or uniquely identifying material tied to a credential that could be sensitive if used alongside other inputs) is being stringified using `fmt.Sprintf("%v", r.ExternalID)` in the `String()` method of `RegistrationResult` in `internal/application/auth.go`.
+**Learning:** Even when explicitly implementing `String()` for redaction (as seen with `PublicKey`), developers can accidentally expose other sensitive identifiers like `ExternalID` by simply interpolating them via generic `%v` formatting.
+**Prevention:** Always review all fields of sensitive struct logs. Do not rely on generic formatters for DTOs; explicitly redact sensitive external IDs using a placeholder such as `***REDACTED***`.
